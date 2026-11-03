@@ -13,7 +13,8 @@ from youtube_transcript_api._errors import (
     NoTranscriptFound,
     RequestBlocked,
     CouldNotRetrieveTranscript,
-    YouTubeTranscriptApiException
+    YouTubeTranscriptApiException,
+    VideoUnavailable,
 )
 
 app = FastAPI(title="YouTube Transcript Pro", version="1.0.0")
@@ -90,7 +91,7 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
         "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
     }
 
-def get_yt_api() -> YouTubeTranscriptApi:
+def get_yt_api(use_proxy: bool = True) -> YouTubeTranscriptApi:
     """Create YouTubeTranscriptApi instance with realistic desktop headers, optional cookies, and proxy support."""
     session = requests.Session()
     session.headers.update({
@@ -120,13 +121,25 @@ def get_yt_api() -> YouTubeTranscriptApi:
                         k, v = item.strip().split("=", 1)
                         session.cookies.set(k.strip(), v.strip(), domain=".youtube.com")
 
-    proxy_url = get_proxy_url()
-    if proxy_url:
-        session.proxies.update({
-            "http": proxy_url,
-            "https": proxy_url,
-        })
+    if use_proxy:
+        proxy_url = get_proxy_url()
+        if proxy_url:
+            session.proxies.update({
+                "http": proxy_url,
+                "https": proxy_url,
+            })
     return YouTubeTranscriptApi(http_client=session)
+
+def fetch_transcript_list_safely(video_id: str):
+    """Attempt fetching transcript list with proxy, auto-fallback to direct session with cookies."""
+    api = get_yt_api(use_proxy=True)
+    try:
+        return api.list(video_id)
+    except RequestBlocked:
+        if get_proxy_url():
+            direct_api = get_yt_api(use_proxy=False)
+            return direct_api.list(video_id)
+        raise
 
 def get_video_info_data(url: str) -> Dict[str, Any]:
     video_id = extract_video_id(url)
@@ -134,10 +147,9 @@ def get_video_info_data(url: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
-    api = get_yt_api()
     languages = []
     try:
-        transcript_list = api.list(video_id)
+        transcript_list = fetch_transcript_list_safely(video_id)
         for t in transcript_list:
             languages.append({
                 "language": t.language,
@@ -145,12 +157,14 @@ def get_video_info_data(url: str) -> Dict[str, Any]:
                 "is_generated": t.is_generated,
                 "is_translatable": t.is_translatable,
             })
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended.")
     except TranscriptsDisabled:
         raise HTTPException(status_code=404, detail="Subtitles/Captions are disabled by the creator for this video.")
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video on YouTube.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. Configure PROXY_URL in environment variables to bypass.")
+        raise HTTPException(status_code=429, detail="YouTube temporarily throttled cloud requests. You can click 'Paste Transcript Directly' below to continue.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:
@@ -177,16 +191,17 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
-    api = get_yt_api()
 
     try:
-        transcript_list = api.list(video_id)
+        transcript_list = fetch_transcript_list_safely(video_id)
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended on YouTube.")
     except TranscriptsDisabled:
         raise HTTPException(status_code=404, detail="Captions/Subtitles are disabled for this video by creator.")
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. Configure PROXY_URL in environment variables to bypass.")
+        raise HTTPException(status_code=429, detail="YouTube temporarily throttled cloud requests. You can click 'Paste Transcript Directly' below to continue.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:
