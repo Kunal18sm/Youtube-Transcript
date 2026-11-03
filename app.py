@@ -61,11 +61,17 @@ def seconds_to_srt_time(seconds: float) -> str:
     ms = total_ms % 1000
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
+def get_proxy_url() -> Optional[str]:
+    p = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or os.getenv("HTTP_PROXY", "").strip()
+    return p if p else None
+
 def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
     """Fetch video title, author, thumbnail using public oEmbed."""
     try:
         url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
-        res = requests.get(url, timeout=5)
+        proxy = get_proxy_url()
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        res = requests.get(url, timeout=5, proxies=proxies)
         if res.status_code == 200:
             data = res.json()
             return {
@@ -96,7 +102,7 @@ def get_yt_api() -> YouTubeTranscriptApi:
         "Sec-Fetch-User": "?1",
         "Sec-Fetch-Dest": "document",
     })
-    proxy_url = os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    proxy_url = get_proxy_url()
     if proxy_url:
         session.proxies.update({
             "http": proxy_url,
@@ -126,7 +132,7 @@ def get_video_info_data(url: str) -> Dict[str, Any]:
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video on YouTube.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. You can use 'Paste Transcript Directly' or set PROXY_URL.")
+        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. Configure PROXY_URL in environment variables to bypass.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:
@@ -162,7 +168,7 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. You can use 'Paste Transcript Directly' to paste text, or set PROXY_URL.")
+        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. Configure PROXY_URL in environment variables to bypass.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:

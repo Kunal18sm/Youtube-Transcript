@@ -510,10 +510,13 @@ function setLoading(isLoading) {
   if (isLoading) {
     loadingState.classList.remove('hidden');
     resultSection.classList.add('hidden');
+    errorState.classList.add('hidden');
     fetchBtn.disabled = true;
+    fetchBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-xs mr-1.5"></i> <span>Extracting...</span>`;
   } else {
     loadingState.classList.add('hidden');
     fetchBtn.disabled = false;
+    fetchBtn.innerHTML = `<span>Extract</span> <i class="fa-solid fa-arrow-right text-xs ml-1"></i>`;
   }
 }
 
@@ -602,6 +605,7 @@ async function handleGenerateQuiz() {
   const chosenSection = quizSectionSelect.value || 'General';
 
   generateQuizBtn.disabled = true;
+  generateQuizBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1.5"></i> <span>Generating MCQs...</span>`;
   quizLoadingSpinner.classList.remove('hidden');
   quizLoadingMsg.textContent = `Analyzing lecture content to generate ${numQuestions} pure concept MCQs in English...`;
 
@@ -634,6 +638,7 @@ async function handleGenerateQuiz() {
     showToast(`Error: ${err.message}`, 'error');
   } finally {
     generateQuizBtn.disabled = false;
+    generateQuizBtn.innerHTML = `<i class="fa-solid fa-bolt mr-1.5"></i> <span>Generate Pure Concept MCQs</span>`;
     quizLoadingSpinner.classList.add('hidden');
   }
 }
@@ -901,12 +906,12 @@ async function toggleQuestionLanguage(questionId) {
   if (question.hindi) {
     question.isHindi = !question.isHindi;
     updateQuestionCardDOM(question);
-    if (label) label.textContent = question.isHindi ? 'English' : 'हिंदी';
+    if (label) label.textContent = question.isHindi ? 'English' : 'Hindi';
     return;
   }
 
   if (btn) btn.disabled = true;
-  if (label) label.textContent = '...';
+  if (label) label.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-[10px] mr-1"></i> Translating...';
 
   try {
     const res = await fetch('/api/translate', {
@@ -931,7 +936,7 @@ async function toggleQuestionLanguage(questionId) {
   } catch (err) {
     console.error('Translation failed:', err);
     showToast('Translation error', 'error');
-    if (label) label.textContent = 'हिंदी';
+    if (label) label.textContent = 'Hindi';
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -966,40 +971,46 @@ async function toggleAllQuestionsLanguage() {
   if (!currentQuizData || !currentQuizData.questions) return;
 
   isGlobalHindi = !isGlobalHindi;
-  globalLangLabel.textContent = isGlobalHindi ? 'View in English' : 'All in Hindi';
+  toggleAllHindiBtn.disabled = true;
+  globalLangLabel.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs mr-1"></i> Translating...';
   showToast(isGlobalHindi ? 'Translating quiz to Hindi...' : 'Switched to English', 'success');
 
-  for (const q of currentQuizData.questions) {
-    if (isGlobalHindi) {
-      if (!q.hindi) {
-        try {
-          const res = await fetch('/api/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question: q.question,
-              options: q.options,
-              explanation: q.explanation,
-              target_lang: 'hi'
-            })
-          });
-          const data = await res.json();
-          if (data.question) q.hindi = data;
-        } catch (e) {
-          continue;
+  try {
+    for (const q of currentQuizData.questions) {
+      if (isGlobalHindi) {
+        if (!q.hindi) {
+          try {
+            const res = await fetch('/api/translate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                question: q.question,
+                options: q.options,
+                explanation: q.explanation,
+                target_lang: 'hi'
+              })
+            });
+            const data = await res.json();
+            if (data.question) q.hindi = data;
+          } catch (e) {
+            continue;
+          }
         }
+        q.isHindi = true;
+      } else {
+        q.isHindi = false;
       }
-      q.isHindi = true;
-    } else {
-      q.isHindi = false;
-    }
-    updateQuestionCardDOM(q);
+      updateQuestionCardDOM(q);
 
-    const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
-    if (btn) {
-      const label = btn.querySelector('.translate-q-label');
-      if (label) label.textContent = q.isHindi ? 'English' : 'हिंदी';
+      const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
+      if (btn) {
+        const label = btn.querySelector('.translate-q-label');
+        if (label) label.textContent = q.isHindi ? 'English' : 'Hindi';
+      }
     }
+  } finally {
+    toggleAllHindiBtn.disabled = false;
+    globalLangLabel.textContent = isGlobalHindi ? 'View in English' : 'All in Hindi';
   }
 }
 
