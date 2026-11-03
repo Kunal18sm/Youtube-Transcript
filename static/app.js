@@ -303,7 +303,21 @@ function setupEventListeners() {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const url = urlInput.value.trim();
-    if (url) fetchTranscript(url);
+    if (!url) return;
+
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      showToast('Yeh website ka address hai! Yahan YouTube video ka link dalein (jaise https://www.youtube.com/watch?v=...)', 'error');
+      urlInput.select();
+      return;
+    }
+
+    if (!url.includes('youtube.com') && !url.includes('youtu.be') && url.length !== 11) {
+      showToast('Please enter a valid YouTube video URL (e.g. https://www.youtube.com/watch?v=...)', 'error');
+      urlInput.focus();
+      return;
+    }
+
+    fetchTranscript(url);
   });
 
   errorRetry.addEventListener('click', () => {
