@@ -91,7 +91,7 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
     }
 
 def get_yt_api() -> YouTubeTranscriptApi:
-    """Create YouTubeTranscriptApi instance with realistic desktop headers and optional proxy support."""
+    """Create YouTubeTranscriptApi instance with realistic desktop headers, optional cookies, and proxy support."""
     session = requests.Session()
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -102,6 +102,15 @@ def get_yt_api() -> YouTubeTranscriptApi:
         "Sec-Fetch-User": "?1",
         "Sec-Fetch-Dest": "document",
     })
+
+    # Optional YouTube Cookies to bypass datacenter IP restrictions for free
+    cookies_str = os.getenv("YOUTUBE_COOKIES", "").strip()
+    if cookies_str:
+        for item in cookies_str.split(";"):
+            if "=" in item:
+                k, v = item.strip().split("=", 1)
+                session.cookies.set(k.strip(), v.strip(), domain=".youtube.com")
+
     proxy_url = get_proxy_url()
     if proxy_url:
         session.proxies.update({
