@@ -123,6 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSavedQuizBadge();
   setupPWA();
   populateSectionDropdown();
+  checkPreviousTranscript();
+  setupNetworkListeners();
 });
 
 // ----------------------------------------------------
@@ -157,10 +159,94 @@ function setupPWA() {
         }
         deferredPrompt = null;
       } else {
-        showToast('App is ready! On mobile: tap "Add to Home Screen"', 'success');
+        showToast('App is ready! On Chrome/Edge click the Install icon in the address bar.', 'success');
       }
     });
   }
+}
+
+// ----------------------------------------------------
+// OFFLINE & LOCAL STORAGE CACHING
+// ----------------------------------------------------
+
+function saveTranscriptToCache(data) {
+  try {
+    if (!data) return;
+    localStorage.setItem('yt_last_transcript', JSON.stringify(data));
+
+    let history = [];
+    try {
+      const raw = localStorage.getItem('yt_transcript_history');
+      if (raw) history = JSON.parse(raw);
+    } catch (e) {}
+
+    const key = data.video_id || data.title;
+    history = history.filter(item => (item.video_id || item.title) !== key);
+    history.unshift({
+      video_id: data.video_id,
+      title: data.title,
+      author: data.author,
+      thumbnail: data.thumbnail,
+      formatted_duration: data.formatted_duration,
+      total_words: data.total_words,
+      snippets_count: (data.snippets && data.snippets.length) || (data.transcript && data.transcript.length) || 0,
+      saved_at: new Date().toISOString(),
+      full_data: data
+    });
+    if (history.length > 20) history = history.slice(0, 20);
+    localStorage.setItem('yt_transcript_history', JSON.stringify(history));
+  } catch (e) {
+    console.warn('Could not cache transcript:', e);
+  }
+}
+
+function checkPreviousTranscript() {
+  const restoreBanner = document.getElementById('restore-banner');
+  const restoreTitle = document.getElementById('restore-title');
+  const restoreMeta = document.getElementById('restore-meta');
+  const restoreLoadBtn = document.getElementById('restore-load-btn');
+  const restoreDismissBtn = document.getElementById('restore-dismiss-btn');
+
+  if (!restoreBanner) return;
+
+  try {
+    const raw = localStorage.getItem('yt_last_transcript');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.title) return;
+
+    restoreTitle.textContent = saved.title;
+    const count = (saved.snippets && saved.snippets.length) || (saved.transcript && saved.transcript.length) || 0;
+    restoreMeta.textContent = `${count.toLocaleString()} captions • ${saved.formatted_duration || ''} • Saved locally (Ready Offline)`;
+    restoreBanner.classList.remove('hidden');
+
+    if (restoreLoadBtn) {
+      restoreLoadBtn.onclick = () => {
+        currentData = saved;
+        currentVideoId = saved.video_id || null;
+        displayVideoResults(saved);
+        restoreBanner.classList.add('hidden');
+        showToast('Restored previous transcript from local browser storage!', 'success');
+      };
+    }
+
+    if (restoreDismissBtn) {
+      restoreDismissBtn.onclick = () => {
+        restoreBanner.classList.add('hidden');
+      };
+    }
+  } catch (e) {
+    console.warn('Error reading saved transcript:', e);
+  }
+}
+
+function setupNetworkListeners() {
+  window.addEventListener('offline', () => {
+    showToast('Offline Mode: Saved transcripts & quizzes are available without internet.', 'info');
+  });
+  window.addEventListener('online', () => {
+    showToast('Internet connected! You are back online.', 'success');
+  });
 }
 
 function setupEventListeners() {
@@ -431,6 +517,7 @@ function handleManualPasteSubmit() {
     available_languages: [{ language: 'English', language_code: 'en' }]
   };
 
+  saveTranscriptToCache(customData);
   renderCurrentView();
   showToast('Transcript loaded! Ready for Quiz Arena.', 'success');
 }
@@ -503,6 +590,7 @@ async function fetchTranscript(urlOrId, selectedLang = null) {
     currentData = data;
     currentVideoId = data.video_id;
 
+    saveTranscriptToCache(data);
     displayVideoResults(data);
     showToast('Transcript loaded successfully!', 'success');
   } catch (err) {
@@ -517,12 +605,14 @@ async function fetchTranscript(urlOrId, selectedLang = null) {
 }
 
 function setLoading(isLoading) {
+  const restoreBanner = document.getElementById('restore-banner');
   if (isLoading) {
     loadingState.classList.remove('hidden');
     resultSection.classList.add('hidden');
     errorState.classList.add('hidden');
+    if (restoreBanner) restoreBanner.classList.add('hidden');
     fetchBtn.disabled = true;
-    fetchBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-xs mr-1.5"></i> <span>Extracting...</span>`;
+    fetchBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Extracting...</span>`;
   } else {
     loadingState.classList.add('hidden');
     fetchBtn.disabled = false;
