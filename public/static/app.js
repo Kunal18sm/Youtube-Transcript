@@ -801,6 +801,10 @@ function renderQuizPlayer() {
             ${idx + 1}
           </span>
           <span class="text-[11px] text-slate-400 font-medium">${q.difficulty || 'Concept'}</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+            <i class="fa-solid fa-circle-check text-[10px]"></i>
+            <span>Fact-Checked</span>
+          </span>
         </div>
 
         <div class="flex items-center gap-1.5 sm:gap-2">
@@ -858,13 +862,26 @@ function renderQuizPlayer() {
       </div>
 
       <!-- Explanation Box -->
-      <div id="explanation-${qid}" class="hidden p-3.5 rounded-2xl bg-surface-900 border border-surface-800 text-xs text-slate-300 animate-fadeIn space-y-1">
-        <strong class="text-white flex items-center gap-1.5">
-          <i class="fa-solid fa-lightbulb text-amber-400"></i> Explanation:
-        </strong>
+      <div id="explanation-${qid}" class="hidden p-3.5 rounded-2xl bg-surface-900 border border-surface-800 text-xs text-slate-300 animate-fadeIn space-y-2">
+        <div class="flex items-center justify-between text-xs pb-1 border-b border-surface-850">
+          <strong class="text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-lightbulb text-amber-400"></i> Explanation & Concept
+          </strong>
+          <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+            <i class="fa-solid fa-shield-halved text-[9px]"></i> AI Fact-Checked
+          </span>
+        </div>
         <p class="text-slate-300 leading-relaxed text-xs" id="exp-text-${qid}">
           ${escapeHtml(qExplanation || 'Refer to the video timestamp for detailed concept.')}
         </p>
+        ${q.verified_fact ? `
+          <div class="mt-2 pt-2 border-t border-surface-850 flex items-start gap-2 text-[11px] text-emerald-300 bg-emerald-950/20 p-2 rounded-xl border border-emerald-900/30">
+            <i class="fa-solid fa-check-double text-emerald-400 mt-0.5 shrink-0"></i>
+            <div class="leading-relaxed">
+              <strong class="text-emerald-200">Verified Evidence:</strong> ${escapeHtml(q.verified_fact)}
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
 
