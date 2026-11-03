@@ -352,23 +352,53 @@ def fetch_transcript_data_ytdlp(video_id: str, lang: Optional[str] = None, meta:
             ydl_opts["proxy"] = proxy_url
 
         cookies_raw = os.getenv("YOUTUBE_COOKIES", "").strip()
-        if cookies_raw:
+        if cookies_raw and not cookies_raw.startswith("http") and ("# Netscape" in cookies_raw or "\t" in cookies_raw or "=" in cookies_raw):
             try:
                 cp = os.path.join(tmpdir, "yt_cookies.txt")
-                with open(cp, "w", encoding="utf-8") as f:
-                    f.write(cookies_raw)
-                ydl_opts["cookiefile"] = cp
+                # Normalize line separators and spaces to tabs if needed
+                lines_out = []
+                if not cookies_raw.startswith("# Netscape"):
+                    lines_out.append("# Netscape HTTP Cookie File\n")
+                for line in cookies_raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("#"):
+                        lines_out.append(line)
+                    elif "\t" in line:
+                        lines_out.append(line)
+                    else:
+                        parts = re.split(r'\s+', line)
+                        if len(parts) >= 7:
+                            lines_out.append("\t".join(parts[:7]))
+                if len(lines_out) > 1:
+                    with open(cp, "w", encoding="utf-8") as f:
+                        f.write("\n".join(lines_out))
+                    ydl_opts["cookiefile"] = cp
             except Exception:
-                pass
+                ydl_opts.pop("cookiefile", None)
 
+        info = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
         except Exception as e:
             err = str(e).lower()
-            if "unavailable" in err or "private" in err:
-                raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
-            raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(e)[:140]}")
+            # If cookie file failed to load, automatically discard cookies and retry immediately
+            if ("cookie" in err or "netscape" in err) and "cookiefile" in ydl_opts:
+                ydl_opts.pop("cookiefile", None)
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                except Exception as inner_e:
+                    err = str(inner_e).lower()
+                    if "unavailable" in err or "private" in err:
+                        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
+                    raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(inner_e)[:140]}")
+            else:
+                if "unavailable" in err or "private" in err:
+                    raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
+                raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(e)[:140]}")
 
         vtt_files = glob.glob(os.path.join(tmpdir, "*.vtt"))
         if not vtt_files:
