@@ -104,12 +104,21 @@ def get_yt_api() -> YouTubeTranscriptApi:
     })
 
     # Optional YouTube Cookies to bypass datacenter IP restrictions for free
-    cookies_str = os.getenv("YOUTUBE_COOKIES", "").strip()
-    if cookies_str:
-        for item in cookies_str.split(";"):
-            if "=" in item:
-                k, v = item.strip().split("=", 1)
-                session.cookies.set(k.strip(), v.strip(), domain=".youtube.com")
+    cookies_raw = os.getenv("YOUTUBE_COOKIES", "").strip()
+    if cookies_raw:
+        for line in cookies_raw.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "\t" in line:
+                parts = line.split("\t")
+                if len(parts) >= 7:
+                    session.cookies.set(parts[5].strip(), parts[6].strip(), domain=".youtube.com")
+            else:
+                for item in line.split(";"):
+                    if "=" in item:
+                        k, v = item.strip().split("=", 1)
+                        session.cookies.set(k.strip(), v.strip(), domain=".youtube.com")
 
     proxy_url = get_proxy_url()
     if proxy_url:
