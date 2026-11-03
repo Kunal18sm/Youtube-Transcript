@@ -82,6 +82,10 @@ const quizSectionSelect = document.getElementById('quiz-section-select');
 const generateQuizBtn = document.getElementById('generate-quiz-btn');
 const quizLoadingSpinner = document.getElementById('quiz-loading-spinner');
 const quizLoadingMsg = document.getElementById('quiz-loading-msg');
+const quizProgressPercent = document.getElementById('quiz-progress-percent');
+const quizProgressBar = document.getElementById('quiz-progress-bar');
+const quizLoadingStage = document.getElementById('quiz-loading-stage');
+const quizCountdownText = document.getElementById('quiz-countdown-text');
 const activeQuizTitle = document.getElementById('active-quiz-title');
 const editActiveQuizTitleBtn = document.getElementById('edit-active-quiz-title-btn');
 const activeQuizSectionBadge = document.getElementById('active-quiz-section-badge');
@@ -698,8 +702,76 @@ function renderTranscript() {
 }
 
 // ----------------------------------------------------
-// AI QUIZ GENERATOR ENGINE (5 to 500 Questions)
+// AI QUIZ GENERATOR ENGINE & REAL-TIME PROGRESS TRACKER
 // ----------------------------------------------------
+
+let quizProgressInterval = null;
+
+function startQuizProgressController(numQuestions) {
+  if (quizProgressInterval) clearInterval(quizProgressInterval);
+
+  // Dynamic estimate based on question volume
+  let estTotalSec = 11;
+  if (numQuestions <= 5) estTotalSec = 8;
+  else if (numQuestions <= 15) estTotalSec = 12;
+  else if (numQuestions <= 30) estTotalSec = 17;
+  else estTotalSec = 26;
+
+  const startTime = Date.now();
+  let currentPercent = 6;
+
+  if (quizProgressBar) quizProgressBar.style.width = '6%';
+  if (quizProgressPercent) quizProgressPercent.textContent = '6%';
+  if (quizCountdownText) quizCountdownText.textContent = `Est. ~${estTotalSec}s remaining`;
+
+  const updateUI = () => {
+    const elapsedSec = (Date.now() - startTime) / 1000;
+    const remainingSec = Math.max(1, Math.round(estTotalSec - elapsedSec));
+
+    const timeRatio = elapsedSec / estTotalSec;
+    if (timeRatio < 1.0) {
+      currentPercent = Math.min(94, Math.max(currentPercent, Math.round(timeRatio * 95)));
+    } else {
+      currentPercent = Math.min(97, currentPercent + 0.15);
+    }
+
+    if (quizProgressBar) quizProgressBar.style.width = `${currentPercent}%`;
+    if (quizProgressPercent) quizProgressPercent.textContent = `${Math.floor(currentPercent)}%`;
+    if (quizCountdownText) quizCountdownText.textContent = `Est. ~${remainingSec}s remaining`;
+
+    if (quizLoadingMsg && quizLoadingStage) {
+      if (currentPercent < 25) {
+        quizLoadingMsg.textContent = 'Analyzing lecture transcript & timestamps...';
+        quizLoadingStage.innerHTML = '<i class="fa-solid fa-file-lines text-slate-500 text-[10px]"></i> <span>Stage 1/4: Analyzing lecture</span>';
+      } else if (currentPercent < 55) {
+        quizLoadingMsg.textContent = `Extracting key facts & formulating ${numQuestions} MCQs...`;
+        quizLoadingStage.innerHTML = '<i class="fa-solid fa-brain text-indigo-400 text-[10px]"></i> <span>Stage 2/4: Formulating MCQs</span>';
+      } else if (currentPercent < 85) {
+        quizLoadingMsg.textContent = 'Dual-pass AI fact-checking & auditing answer keys...';
+        quizLoadingStage.innerHTML = '<i class="fa-solid fa-shield-halved text-emerald-400 text-[10px]"></i> <span>Stage 3/4: Dual-Pass Fact-Checking</span>';
+      } else {
+        quizLoadingMsg.textContent = 'Finalizing verified questions & explanation proofs...';
+        quizLoadingStage.innerHTML = '<i class="fa-solid fa-check-double text-rose-400 text-[10px]"></i> <span>Stage 4/4: Final verification</span>';
+      }
+    }
+  };
+
+  updateUI();
+  quizProgressInterval = setInterval(updateUI, 120);
+
+  return {
+    finish: () => {
+      if (quizProgressInterval) clearInterval(quizProgressInterval);
+      if (quizProgressBar) quizProgressBar.style.width = '100%';
+      if (quizProgressPercent) quizProgressPercent.textContent = '100%';
+      if (quizLoadingMsg) quizLoadingMsg.textContent = '✅ 100% Fact-Checked! Launching Quiz Arena...';
+      if (quizCountdownText) quizCountdownText.textContent = 'Ready!';
+    },
+    stop: () => {
+      if (quizProgressInterval) clearInterval(quizProgressInterval);
+    }
+  };
+}
 
 async function handleGenerateQuiz() {
   if (!currentData) {
@@ -719,9 +791,10 @@ async function handleGenerateQuiz() {
   const chosenSection = quizSectionSelect.value || 'General';
 
   generateQuizBtn.disabled = true;
-  generateQuizBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1.5"></i> <span>Generating MCQs...</span>`;
+  generateQuizBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1.5"></i> <span>Generating Fact-Checked MCQs...</span>`;
   quizLoadingSpinner.classList.remove('hidden');
-  quizLoadingMsg.textContent = `Analyzing lecture content to generate ${numQuestions} pure concept MCQs in English...`;
+
+  const progressTracker = startQuizProgressController(numQuestions);
 
   try {
     const customTitle = customQuizTitleInput && customQuizTitleInput.value.trim() ? customQuizTitleInput.value.trim() : (currentData?.title || 'Video Quiz');
@@ -741,18 +814,23 @@ async function handleGenerateQuiz() {
     const quizData = await res.json();
     if (!res.ok) throw new Error(quizData.detail || 'Quiz generation failed.');
 
+    progressTracker.finish();
+    await new Promise(r => setTimeout(r, 400));
+
     currentQuizData = quizData;
     currentQuizData.title = customTitle || quizData.title || 'Video Quiz';
     currentQuizData.section = chosenSection;
     activeQuizBadge.classList.remove('hidden');
     switchPage('quiz');
     resetCurrentQuiz();
-    showToast(`Generated ${quizData.total_questions} pure concept MCQs!`, 'success');
+    showToast(`Generated & Fact-Checked ${quizData.total_questions} pure concept MCQs!`, 'success');
   } catch (err) {
+    progressTracker.stop();
     showToast(`Error: ${err.message}`, 'error');
   } finally {
+    progressTracker.stop();
     generateQuizBtn.disabled = false;
-    generateQuizBtn.innerHTML = `<i class="fa-solid fa-bolt mr-1.5"></i> <span>Generate Pure Concept MCQs</span>`;
+    generateQuizBtn.innerHTML = `<i class="fa-solid fa-shield-halved mr-1.5"></i> <span>Generate Fact-Checked Concept MCQs</span>`;
     quizLoadingSpinner.classList.add('hidden');
   }
 }
