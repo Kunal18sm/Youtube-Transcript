@@ -280,6 +280,51 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
         "srt_content": srt_content
     }
 
+from pydantic import BaseModel
+from quiz_generator import generate_mcq_quiz
+
+class QuizRequest(BaseModel):
+    video_id: Optional[str] = None
+    url: Optional[str] = None
+    transcript_text: Optional[str] = None
+    title: Optional[str] = "Video Quiz"
+    num_questions: int = 10
+    difficulty: str = "all"
+
+class TranslateRequest(BaseModel):
+    text: Optional[str] = None
+    question: Optional[str] = None
+    options: Optional[List[str]] = None
+    explanation: Optional[str] = None
+    target_lang: str = "hi"
+
+def translate_str(text: str, target: str = "hi") -> str:
+    if not text:
+        return ""
+    import urllib.parse
+    url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target}&dt=t&q={urllib.parse.quote(text)}"
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            return "".join([part[0] for part in r.json()[0] if part[0]])
+    except Exception:
+        pass
+    return text
+
+@app.post("/api/translate")
+@app.post("/translate")
+def translate_endpoint(req: TranslateRequest):
+    if req.question:
+        trans_q = translate_str(req.question, req.target_lang)
+        trans_opts = [translate_str(opt, req.target_lang) for opt in (req.options or [])]
+        trans_exp = translate_str(req.explanation or "", req.target_lang)
+        return {
+            "question": trans_q,
+            "options": trans_opts,
+            "explanation": trans_exp
+        }
+    return {"translated_text": translate_str(req.text or "", req.target_lang)}
+
 # FastAPI Local Endpoints
 @app.get("/api/info")
 @app.get("/info")
@@ -294,6 +339,30 @@ def get_transcript(
 ):
     return get_transcript_data(url, lang)
 
+@app.post("/api/generate-quiz")
+@app.post("/generate-quiz")
+def create_quiz(req: QuizRequest):
+    text = req.transcript_text
+    title = req.title or "Video Quiz"
+    if not text:
+        vid_url = req.url or req.video_id
+        if not vid_url:
+            raise HTTPException(status_code=400, detail="Either url, video_id, or transcript_text must be provided.")
+        t_data = get_transcript_data(vid_url)
+        text = t_data["timestamped_text"]
+        title = t_data.get("title", title)
+    
+    try:
+        quiz = generate_mcq_quiz(
+            transcript_text=text,
+            title=title,
+            num_questions=req.num_questions,
+            difficulty=req.difficulty
+        )
+        return quiz
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Serve frontend static files
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(BASE_DIR, "public", "static")
@@ -302,6 +371,34 @@ if not os.path.exists(static_dir):
 
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+@app.get("/manifest.json")
+def get_manifest():
+    p = os.path.join(BASE_DIR, "public", "manifest.json")
+    if not os.path.exists(p):
+        p = os.path.join(BASE_DIR, "static", "manifest.json")
+    return FileResponse(p)
+
+@app.get("/sw.js")
+def get_sw():
+    p = os.path.join(BASE_DIR, "public", "sw.js")
+    if not os.path.exists(p):
+        p = os.path.join(BASE_DIR, "static", "sw.js")
+    return FileResponse(p, media_type="application/javascript")
+
+@app.get("/icon-192.png")
+def get_icon192():
+    p = os.path.join(BASE_DIR, "public", "icon-192.png")
+    if not os.path.exists(p):
+        p = os.path.join(BASE_DIR, "static", "icon-192.png")
+    return FileResponse(p)
+
+@app.get("/icon-512.png")
+def get_icon512():
+    p = os.path.join(BASE_DIR, "public", "icon-512.png")
+    if not os.path.exists(p):
+        p = os.path.join(BASE_DIR, "static", "icon-512.png")
+    return FileResponse(p)
 
 @app.get("/")
 def serve_index():

@@ -1,12 +1,35 @@
 // State management
 let currentData = null;
-let currentView = 'timeline'; // 'timeline', 'paragraph', 'raw'
+let currentVideoId = null;
 let ytPlayer = null;
 let ytPlayerReady = false;
-let currentVideoId = null;
-let activePlayingSnippet = null;
 
-// DOM Elements
+// Active Quiz State
+let currentQuizData = null;
+let quizUserAnswers = {};
+let quizScore = { correct: 0, wrong: 0 };
+let isGlobalHindi = false;
+
+// Library & Folder State
+let activeSectionFilter = 'All';
+const DEFAULT_SECTIONS = ['All', 'General', 'History', 'Coding & Tech', 'Science', 'UPSC & Exams'];
+
+// PWA Install Prompt Deferred Event
+let deferredPrompt = null;
+
+// DOM Elements: Navigation Pages
+const navHomeBtn = document.getElementById('nav-home-btn');
+const navQuizBtn = document.getElementById('nav-quiz-btn');
+const navLibraryBtn = document.getElementById('nav-library-btn');
+const activeQuizBadge = document.getElementById('active-quiz-badge');
+const savedQuizBadge = document.getElementById('saved-quiz-badge');
+const pwaInstallBtn = document.getElementById('pwa-install-btn');
+
+const pageHome = document.getElementById('page-home');
+const pageQuiz = document.getElementById('page-quiz');
+const pageLibrary = document.getElementById('page-library');
+
+// Home Page DOM Elements
 const form = document.getElementById('transcript-form');
 const urlInput = document.getElementById('video-url');
 const clearBtn = document.getElementById('clear-btn');
@@ -17,50 +40,136 @@ const errorMessage = document.getElementById('error-message');
 const errorRetry = document.getElementById('error-retry');
 const resultSection = document.getElementById('result-section');
 
-// Metadata DOM
+// Video Meta DOM
 const metaThumb = document.getElementById('meta-thumb');
 const metaAuthor = document.getElementById('meta-author');
 const metaTitle = document.getElementById('meta-title');
 const statDuration = document.getElementById('stat-duration');
 const statWords = document.getElementById('stat-words');
-const statReading = document.getElementById('stat-reading');
 const languageSelect = document.getElementById('language-select');
+const jumpToQuizBtn = document.getElementById('jump-to-quiz-btn');
 
-// Player DOM
+// Video Player DOM
 const togglePlayerBtn = document.getElementById('toggle-player-btn');
 const playerBtnLabel = document.getElementById('player-btn-label');
 const playerContainer = document.getElementById('player-container');
 const closePlayerBtn = document.getElementById('close-player-btn');
-const workspaceGrid = document.getElementById('workspace-grid');
-const transcriptMainCard = document.getElementById('transcript-main-card');
 
-// Toolbar & Body DOM
-const viewTabs = document.querySelectorAll('.view-tab');
+// Transcript DOM
 const searchInput = document.getElementById('search-input');
-const searchCount = document.getElementById('search-count');
 const transcriptBody = document.getElementById('transcript-body');
 const copyBtn = document.getElementById('copy-btn');
-const aiPromptBtn = document.getElementById('ai-prompt-btn');
-
-// Export Dropdown DOM
 const exportDropdownBtn = document.getElementById('export-dropdown-btn');
 const exportMenu = document.getElementById('export-menu');
 const downloadTxt = document.getElementById('download-txt');
 const downloadSrt = document.getElementById('download-srt');
 const downloadJson = document.getElementById('download-json');
 
+// Quiz Arena Page DOM Elements
+const quizConfigCard = document.getElementById('quiz-config-card');
+const quizPlayerCard = document.getElementById('quiz-player-card');
+const quizCountSelect = document.getElementById('quiz-count-select');
+const customCountInput = document.getElementById('custom-count-input');
+const quizSectionSelect = document.getElementById('quiz-section-select');
+const generateQuizBtn = document.getElementById('generate-quiz-btn');
+const quizLoadingSpinner = document.getElementById('quiz-loading-spinner');
+const quizLoadingMsg = document.getElementById('quiz-loading-msg');
+const activeQuizTitle = document.getElementById('active-quiz-title');
+const activeQuizSectionBadge = document.getElementById('active-quiz-section-badge');
+const quizQProgress = document.getElementById('quiz-q-progress');
+const quizScoreCorrect = document.getElementById('quiz-score-correct');
+const quizScoreWrong = document.getElementById('quiz-score-wrong');
+const quizQuestionsList = document.getElementById('quiz-questions-list');
+const quizResultsCard = document.getElementById('quiz-results-card');
+const quizFinalScoreText = document.getElementById('quiz-final-score-text');
+const finishRetakeBtn = document.getElementById('finish-retake-btn');
+const finishSaveBtn = document.getElementById('finish-save-btn');
+const saveQuizBtn = document.getElementById('save-quiz-btn');
+const downloadQuizJsonBtn = document.getElementById('download-quiz-json-btn');
+const downloadQuizTextBtn = document.getElementById('download-quiz-text-btn');
+const retakeQuizBtn = document.getElementById('retake-quiz-btn');
+const toggleAllHindiBtn = document.getElementById('toggle-all-hindi-btn');
+const globalLangLabel = document.getElementById('global-lang-label');
+
+// Library Page DOM Elements
+const libraryQuizzesGrid = document.getElementById('library-quizzes-grid');
+const librarySectionPills = document.getElementById('library-section-pills');
+const createSectionBtn = document.getElementById('create-section-btn');
+const importQuizFile = document.getElementById('import-quiz-file');
+
 // Toast DOM
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
-const toastIcon = document.getElementById('toast-icon');
 
-// Initialize events
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
+  updateSavedQuizBadge();
+  setupPWA();
+  populateSectionDropdown();
 });
 
+// ----------------------------------------------------
+// PWA INSTALLATION & SERVICE WORKER
+// ----------------------------------------------------
+
+function setupPWA() {
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.log('SW registration note:', err);
+    });
+  }
+
+  // Listen for native install prompt
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (pwaInstallBtn) {
+      pwaInstallBtn.classList.remove('hidden');
+    }
+  });
+
+  if (pwaInstallBtn) {
+    pwaInstallBtn.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          showToast('App installed successfully!', 'success');
+          pwaInstallBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+      } else {
+        showToast('App is ready! On mobile: tap "Add to Home Screen"', 'success');
+      }
+    });
+  }
+}
+
 function setupEventListeners() {
-  // Input handling
+  // Desktop Navigation
+  navHomeBtn.addEventListener('click', () => switchPage('home'));
+  navQuizBtn.addEventListener('click', () => switchPage('quiz'));
+  navLibraryBtn.addEventListener('click', () => switchPage('library'));
+
+  // Mobile Bottom Bar Navigation
+  document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mobile-nav-btn').forEach(b => {
+        b.classList.remove('active', 'text-white', 'font-bold');
+        b.classList.add('text-slate-400');
+      });
+      btn.classList.add('active', 'text-white', 'font-bold');
+      btn.classList.remove('text-slate-400');
+      switchPage(btn.dataset.target);
+    });
+  });
+
+  if (jumpToQuizBtn) {
+    jumpToQuizBtn.addEventListener('click', () => switchPage('quiz'));
+  }
+
+  // Input events
   urlInput.addEventListener('input', () => {
     clearBtn.classList.toggle('hidden', !urlInput.value);
   });
@@ -71,7 +180,6 @@ function setupEventListeners() {
     urlInput.focus();
   });
 
-  // Sample buttons
   document.querySelectorAll('.sample-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       urlInput.value = btn.dataset.url;
@@ -80,56 +188,28 @@ function setupEventListeners() {
     });
   });
 
-  // Form submit
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const url = urlInput.value.trim();
-    if (url) {
-      fetchTranscript(url);
-    }
+    if (url) fetchTranscript(url);
   });
 
-  // Error retry
   errorRetry.addEventListener('click', () => {
     errorState.classList.add('hidden');
     urlInput.focus();
   });
 
-  // Language change
   languageSelect.addEventListener('change', () => {
-    if (currentVideoId) {
-      fetchTranscript(currentVideoId, languageSelect.value);
-    }
+    if (currentVideoId) fetchTranscript(currentVideoId, languageSelect.value);
   });
 
-  // View switchers
-  viewTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      viewTabs.forEach(t => {
-        t.classList.remove('active', 'text-white', 'bg-surface-800', 'shadow-md');
-        t.classList.add('text-slate-400');
-      });
-      tab.classList.add('active', 'text-white', 'bg-surface-800', 'shadow-md');
-      tab.classList.remove('text-slate-400');
-      currentView = tab.dataset.view;
-      renderCurrentView();
-    });
-  });
+  searchInput.addEventListener('input', renderTranscript);
 
-  // Search input
-  searchInput.addEventListener('input', () => {
-    renderCurrentView();
-  });
-
-  // Video toggle
   togglePlayerBtn.addEventListener('click', togglePlayer);
   closePlayerBtn.addEventListener('click', togglePlayer);
 
-  // Copy buttons
   copyBtn.addEventListener('click', copyTranscript);
-  aiPromptBtn.addEventListener('click', copyAiPrompt);
 
-  // Export dropdown
   exportDropdownBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     exportMenu.classList.toggle('hidden');
@@ -142,182 +222,953 @@ function setupEventListeners() {
   downloadTxt.addEventListener('click', () => downloadFile('txt'));
   downloadSrt.addEventListener('click', () => downloadFile('srt'));
   downloadJson.addEventListener('click', () => downloadFile('json'));
+
+  // Custom question count toggle
+  quizCountSelect.addEventListener('change', () => {
+    if (quizCountSelect.value === 'custom') {
+      customCountInput.classList.remove('hidden');
+      customCountInput.focus();
+    } else {
+      customCountInput.classList.add('hidden');
+    }
+  });
+
+  // Quiz Arena Buttons
+  generateQuizBtn.addEventListener('click', handleGenerateQuiz);
+  retakeQuizBtn.addEventListener('click', resetCurrentQuiz);
+  finishRetakeBtn.addEventListener('click', resetCurrentQuiz);
+  saveQuizBtn.addEventListener('click', saveCurrentQuizLocally);
+  finishSaveBtn.addEventListener('click', saveCurrentQuizLocally);
+  downloadQuizJsonBtn.addEventListener('click', downloadQuizAsJson);
+  downloadQuizTextBtn.addEventListener('click', downloadQuizAsPrintableText);
+  toggleAllHindiBtn.addEventListener('click', toggleAllQuestionsLanguage);
+
+  // Library Page: Add New Folder & File Import
+  createSectionBtn.addEventListener('click', handleCreateNewSection);
+  importQuizFile.addEventListener('change', handleImportQuizFile);
 }
 
-// Fetch Transcript API Call
+// ----------------------------------------------------
+// MULTI-PAGE ROUTER (Home, Quiz Arena, Library)
+// ----------------------------------------------------
+
+function switchPage(pageKey) {
+  pageHome.classList.add('hidden');
+  pageQuiz.classList.add('hidden');
+  pageLibrary.classList.add('hidden');
+
+  [navHomeBtn, navQuizBtn, navLibraryBtn].forEach(btn => {
+    btn.classList.remove('active', 'text-white', 'bg-surface-800', 'shadow-md');
+    btn.classList.add('text-slate-400');
+  });
+
+  if (pageKey === 'home') {
+    pageHome.classList.remove('hidden');
+    navHomeBtn.classList.add('active', 'text-white', 'bg-surface-800', 'shadow-md');
+    navHomeBtn.classList.remove('text-slate-400');
+  } else if (pageKey === 'quiz') {
+    pageQuiz.classList.remove('hidden');
+    navQuizBtn.classList.add('active', 'text-white', 'bg-surface-800', 'shadow-md');
+    navQuizBtn.classList.remove('text-slate-400');
+
+    if (currentQuizData) {
+      quizConfigCard.classList.add('hidden');
+      quizPlayerCard.classList.remove('hidden');
+    } else {
+      quizConfigCard.classList.remove('hidden');
+      quizPlayerCard.classList.add('hidden');
+    }
+  } else if (pageKey === 'library') {
+    pageLibrary.classList.remove('hidden');
+    navLibraryBtn.classList.add('active', 'text-white', 'bg-surface-800', 'shadow-md');
+    navLibraryBtn.classList.remove('text-slate-400');
+    renderLibrarySections();
+    renderLibraryQuizzesGrid();
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ----------------------------------------------------
+// FETCH TRANSCRIPT
+// ----------------------------------------------------
+
 async function fetchTranscript(urlOrId, selectedLang = null) {
   setLoading(true);
   errorState.classList.add('hidden');
 
   try {
     let apiUrl = `/api/transcript?url=${encodeURIComponent(urlOrId)}`;
-    if (selectedLang) {
-      apiUrl += `&lang=${encodeURIComponent(selectedLang)}`;
-    }
+    if (selectedLang) apiUrl += `&lang=${encodeURIComponent(selectedLang)}`;
 
     const res = await fetch(apiUrl);
     const data = await res.json();
 
-    if (!res.ok) {
-      throw new Error(data.detail || 'Failed to fetch transcript.');
-    }
+    if (!res.ok) throw new Error(data.detail || 'Failed to fetch transcript.');
 
     currentData = data;
     currentVideoId = data.video_id;
-    displayResults(data);
-    showToast('Transcript loaded in seconds!', 'success');
+
+    displayVideoResults(data);
+    showToast('Transcript loaded successfully!', 'success');
   } catch (err) {
-    console.error(err);
     showError(err.message);
   } finally {
     setLoading(false);
   }
 }
 
-// Loading state
 function setLoading(isLoading) {
   if (isLoading) {
     loadingState.classList.remove('hidden');
     resultSection.classList.add('hidden');
     fetchBtn.disabled = true;
-    fetchBtn.classList.add('opacity-75');
   } else {
     loadingState.classList.add('hidden');
     fetchBtn.disabled = false;
-    fetchBtn.classList.remove('opacity-75');
   }
 }
 
-// Show error
 function showError(msg) {
   errorMessage.textContent = msg;
   errorState.classList.remove('hidden');
   resultSection.classList.add('hidden');
 }
 
-// Display results
-function displayResults(data) {
-  // Update Video Meta
+function displayVideoResults(data) {
   metaThumb.src = data.thumbnail;
   metaAuthor.textContent = data.author;
   metaTitle.textContent = data.title;
   statDuration.textContent = data.formatted_duration;
   statWords.textContent = Number(data.total_words).toLocaleString();
-  statReading.textContent = data.estimated_reading_time_min;
 
-  // Populate Languages dropdown
   languageSelect.innerHTML = '';
   if (data.available_languages && data.available_languages.length > 0) {
     data.available_languages.forEach(lang => {
       const opt = document.createElement('option');
       opt.value = lang.language_code;
       opt.textContent = `${lang.language}${lang.is_generated ? ' (Auto)' : ''}`;
-      if (lang.language_code === data.language_code) {
-        opt.selected = true;
-      }
+      if (lang.language_code === data.language_code) opt.selected = true;
       languageSelect.appendChild(opt);
     });
-  } else {
-    const opt = document.createElement('option');
-    opt.value = data.language_code;
-    opt.textContent = data.language;
-    languageSelect.appendChild(opt);
   }
 
-  // Update YouTube Player if already active
   if (!playerContainer.classList.contains('hidden')) {
     initOrUpdatePlayer(data.video_id);
   }
 
-  // Render Transcript Body
-  renderCurrentView();
-
+  renderTranscript();
   resultSection.classList.remove('hidden');
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// Render based on active view mode
-function renderCurrentView() {
+function renderTranscript() {
   if (!currentData) return;
-
   const query = searchInput.value.trim().toLowerCase();
   transcriptBody.innerHTML = '';
 
-  let matchTotal = 0;
+  currentData.snippets.forEach((snippet) => {
+    const item = document.createElement('div');
+    item.className = 'snippet-item flex items-start gap-2.5 p-2 rounded-xl hover:bg-surface-850 cursor-pointer transition-colors';
 
-  if (currentView === 'timeline') {
-    // Render timeline snippets
-    currentData.snippets.forEach((snippet) => {
-      const item = document.createElement('div');
-      item.className = 'snippet-item flex items-start gap-3.5 p-3 rounded-2xl border border-transparent hover:border-surface-700/80 hover:bg-surface-850/60 transition-all cursor-pointer group';
-      item.dataset.start = snippet.start;
-
-      // Click to seek in video
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.snippet-item').forEach(el => el.classList.remove('active-playing'));
-        item.classList.add('active-playing');
-        seekToTime(snippet.start);
-      });
-
-      const hasMatch = query && snippet.text.toLowerCase().includes(query);
-      if (hasMatch) matchTotal++;
-
-      const highlightedText = highlightText(snippet.text, query);
-
-      item.innerHTML = `
-        <button class="shrink-0 text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-surface-950 text-rose-400 group-hover:bg-rose-600 group-hover:text-white border border-surface-700/80 transition-all shadow-sm" title="Play at ${snippet.formatted_time}">
-          <i class="fa-solid fa-play text-[9px] mr-1 opacity-70"></i>${snippet.formatted_time}
-        </button>
-        <div class="flex-1 text-slate-200 text-sm leading-relaxed">${highlightedText}</div>
-      `;
-      transcriptBody.appendChild(item);
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.snippet-item').forEach(el => el.classList.remove('active-playing'));
+      item.classList.add('active-playing');
+      seekToTime(snippet.start);
     });
-  } else if (currentView === 'paragraph') {
-    // Render grouped paragraphs
-    currentData.paragraphs.forEach((para) => {
-      const item = document.createElement('div');
-      item.className = 'snippet-item p-4 rounded-2xl border border-transparent hover:border-surface-700/80 hover:bg-surface-850/60 mb-2 transition-all';
 
-      const hasMatch = query && para.text.toLowerCase().includes(query);
-      if (hasMatch) matchTotal++;
+    const highlightedText = highlightText(snippet.text, query);
+    item.innerHTML = `
+      <span class="shrink-0 font-mono text-[11px] text-red-400 bg-surface-950 px-2 py-0.5 rounded-lg border border-surface-800">${snippet.formatted_time}</span>
+      <span class="flex-1 text-slate-300 text-xs sm:text-sm leading-relaxed">${highlightedText}</span>
+    `;
+    transcriptBody.appendChild(item);
+  });
+}
 
-      const highlightedText = highlightText(para.text, query);
+// ----------------------------------------------------
+// AI QUIZ GENERATOR ENGINE (5 to 500 Questions)
+// ----------------------------------------------------
 
-      item.innerHTML = `
-        <div class="flex items-center gap-2 mb-2">
-          <button class="text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-surface-950 text-rose-400 hover:bg-rose-600 hover:text-white border border-surface-700/80 transition-all shadow-sm cursor-pointer" onclick="seekToTime(${para.start})">
-            <i class="fa-solid fa-play text-[8px] mr-1 opacity-70"></i>${para.formatted_time}
-          </button>
-        </div>
-        <p class="text-slate-200 text-sm leading-relaxed">${highlightedText}</p>
-      `;
-      transcriptBody.appendChild(item);
-    });
-  } else if (currentView === 'raw') {
-    // Render raw continuous text
-    const container = document.createElement('div');
-    container.className = 'p-5 rounded-2xl bg-surface-950/70 border border-surface-800 select-all';
-
-    const highlightedText = highlightText(currentData.plain_text, query);
-    if (query) {
-      const matches = currentData.plain_text.toLowerCase().split(query).length - 1;
-      matchTotal = matches;
-    }
-
-    container.innerHTML = `<p class="whitespace-pre-wrap leading-relaxed text-slate-200 text-sm sm:text-base">${highlightedText}</p>`;
-    transcriptBody.appendChild(container);
+async function handleGenerateQuiz() {
+  if (!currentData) {
+    showToast('Please load a video transcript first on the Home page!', 'error');
+    switchPage('home');
+    return;
   }
 
-  // Update search badge
-  if (query) {
-    searchCount.textContent = `${matchTotal} ${matchTotal === 1 ? 'match' : 'matches'}`;
-    searchCount.classList.remove('hidden');
+  let numQuestions = 25;
+  if (quizCountSelect.value === 'custom') {
+    numQuestions = parseInt(customCountInput.value, 10) || 25;
   } else {
-    searchCount.classList.add('hidden');
+    numQuestions = parseInt(quizCountSelect.value, 10) || 25;
+  }
+
+  numQuestions = Math.max(3, Math.min(500, numQuestions));
+  const chosenSection = quizSectionSelect.value || 'General';
+
+  generateQuizBtn.disabled = true;
+  quizLoadingSpinner.classList.remove('hidden');
+  quizLoadingMsg.textContent = `Analyzing lecture content to generate ${numQuestions} pure concept MCQs in English...`;
+
+  try {
+    const res = await fetch('/api/generate-quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        video_id: currentVideoId,
+        transcript_text: currentData.timestamped_text,
+        title: currentData.title,
+        num_questions: numQuestions,
+        difficulty: 'all'
+      })
+    });
+
+    const quizData = await res.json();
+    if (!res.ok) throw new Error(quizData.detail || 'Quiz generation failed.');
+
+    currentQuizData = quizData;
+    currentQuizData.section = chosenSection;
+    activeQuizBadge.classList.remove('hidden');
+    resetCurrentQuiz();
+    showToast(`Generated ${quizData.total_questions} pure concept MCQs!`, 'success');
+  } catch (err) {
+    showToast(`Error: ${err.message}`, 'error');
+  } finally {
+    generateQuizBtn.disabled = false;
+    quizLoadingSpinner.classList.add('hidden');
   }
 }
 
-// Highlight helper
+function resetCurrentQuiz() {
+  if (!currentQuizData) return;
+
+  quizUserAnswers = {};
+  quizScore = { correct: 0, wrong: 0 };
+  isGlobalHindi = false;
+  globalLangLabel.textContent = 'All in Hindi';
+  quizResultsCard.classList.add('hidden');
+
+  activeQuizTitle.textContent = currentQuizData.title || 'Video Quiz';
+  if (activeQuizSectionBadge) {
+    activeQuizSectionBadge.textContent = currentQuizData.section || 'General';
+  }
+
+  updateQuizScoreUI();
+  renderQuizPlayer();
+
+  quizConfigCard.classList.add('hidden');
+  quizPlayerCard.classList.remove('hidden');
+}
+
+function renderQuizPlayer() {
+  quizQuestionsList.innerHTML = '';
+
+  currentQuizData.questions.forEach((q, idx) => {
+    const qCard = document.createElement('div');
+    const qid = q.id || idx + 1;
+    qCard.id = `q-card-${qid}`;
+    qCard.className = 'bg-surface-950 border border-surface-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-3.5';
+
+    const timestampSec = parseTimestampToSeconds(q.timestamp || '00:00');
+    const isHindi = q.isHindi || false;
+    const qText = isHindi && q.hindi ? q.hindi.question : q.question;
+    const qOptions = isHindi && q.hindi ? q.hindi.options : q.options;
+    const qExplanation = isHindi && q.hindi ? q.hindi.explanation : q.explanation;
+
+    qCard.innerHTML = `
+      <div class="flex items-center justify-between text-xs pb-1 border-b border-surface-850">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-surface-850 font-mono font-bold text-slate-300 flex items-center justify-center text-xs shadow-inner">
+            ${idx + 1}
+          </span>
+          <span class="text-[11px] text-slate-400 font-medium">${q.difficulty || 'Concept'}</span>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- 1-Click Hindi / English Translate Button -->
+          <button 
+            class="translate-q-btn flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-surface-900 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all cursor-pointer"
+            data-qid="${qid}"
+            title="Translate question between English and Hindi"
+          >
+            <i class="fa-solid fa-language text-xs"></i>
+            <span class="translate-q-label">${isHindi ? 'English' : 'हिंदी'}</span>
+          </button>
+
+          <!-- Timestamp Seek Button -->
+          <button class="flex items-center gap-1 font-mono text-[11px] text-rose-400 bg-surface-900 hover:bg-rose-600 hover:text-white px-2 py-0.5 rounded-lg border border-surface-800 cursor-pointer transition-colors" onclick="seekToTime(${timestampSec})" title="Jump video to ${q.timestamp}">
+            <i class="fa-solid fa-play text-[8px]"></i>
+            <span>${q.timestamp || '00:00'}</span>
+          </button>
+
+          <!-- NEW: Delete Individual Question Button -->
+          <button 
+            class="delete-single-q-btn p-1.5 text-slate-500 hover:text-red-400 hover:bg-surface-850 rounded-lg cursor-pointer transition-colors"
+            data-qid="${qid}"
+            title="Delete this question from quiz"
+          >
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Question Title -->
+      <h4 class="font-bold text-white text-xs sm:text-base leading-snug" id="q-text-${qid}">
+        ${escapeHtml(qText)}
+      </h4>
+
+      <!-- 4 Options Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3" id="options-group-${qid}">
+        ${qOptions.map((opt) => {
+          const letter = opt.trim().charAt(0).toUpperCase();
+          const cleanOptText = opt.replace(/^[A-D]\)\s*/, '');
+          return `
+            <button 
+              class="quiz-option-btn text-left p-3 rounded-2xl bg-surface-900 hover:bg-surface-800 border border-surface-800 text-xs sm:text-sm text-slate-200 transition-all cursor-pointer flex items-start gap-2.5 group"
+              data-qid="${qid}"
+              data-letter="${letter}"
+            >
+              <span class="shrink-0 w-5 h-5 rounded-md bg-surface-950 text-slate-300 font-mono font-bold text-xs flex items-center justify-center group-hover:bg-amber-500 group-hover:text-black transition-colors">
+                ${letter}
+              </span>
+              <span class="flex-1 mt-0.5">${escapeHtml(cleanOptText)}</span>
+              <i class="option-icon hidden text-sm mt-0.5 shrink-0"></i>
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Explanation Box -->
+      <div id="explanation-${qid}" class="hidden p-3.5 rounded-2xl bg-surface-900 border border-surface-800 text-xs text-slate-300 animate-fadeIn space-y-1">
+        <strong class="text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-lightbulb text-amber-400"></i> Explanation:
+        </strong>
+        <p class="text-slate-300 leading-relaxed text-xs" id="exp-text-${qid}">
+          ${escapeHtml(qExplanation || 'Refer to the video timestamp for detailed concept.')}
+        </p>
+      </div>
+    `;
+
+    quizQuestionsList.appendChild(qCard);
+  });
+
+  // Attach option clicks
+  document.querySelectorAll('.quiz-option-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      handleAnswerSelect(btn.dataset.qid, btn.dataset.letter);
+    });
+  });
+
+  // Attach individual question translate clicks
+  document.querySelectorAll('.translate-q-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const qid = btn.dataset.qid;
+      toggleQuestionLanguage(qid);
+    });
+  });
+
+  // Attach individual question delete clicks
+  document.querySelectorAll('.delete-single-q-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const qid = btn.dataset.qid;
+      handleDeleteSingleQuestion(qid);
+    });
+  });
+}
+
+function handleAnswerSelect(questionId, selectedLetter) {
+  if (quizUserAnswers[questionId]) return;
+
+  const question = currentQuizData.questions.find((q, idx) => (q.id || idx + 1) == questionId);
+  if (!question) return;
+
+  const correctLetter = (question.correct_answer || '').trim().charAt(0).toUpperCase();
+  quizUserAnswers[questionId] = selectedLetter;
+
+  const container = document.getElementById(`options-group-${questionId}`);
+  const btns = container.querySelectorAll('.quiz-option-btn');
+  const isCorrect = selectedLetter === correctLetter;
+
+  if (isCorrect) {
+    quizScore.correct++;
+  } else {
+    quizScore.wrong++;
+  }
+
+  btns.forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('hover:bg-surface-800', 'cursor-pointer');
+    const bLetter = btn.dataset.letter;
+    const icon = btn.querySelector('.option-icon');
+
+    if (bLetter === correctLetter) {
+      btn.classList.add('bg-emerald-950/70', 'border-emerald-500', 'text-emerald-300');
+      if (icon) {
+        icon.className = 'option-icon fa-solid fa-circle-check text-emerald-400';
+        icon.classList.remove('hidden');
+      }
+    } else if (bLetter === selectedLetter && !isCorrect) {
+      btn.classList.add('bg-rose-950/70', 'border-rose-500', 'text-rose-300');
+      if (icon) {
+        icon.className = 'option-icon fa-solid fa-circle-xmark text-rose-400';
+        icon.classList.remove('hidden');
+      }
+    } else {
+      btn.classList.add('opacity-40');
+    }
+  });
+
+  const expBox = document.getElementById(`explanation-${questionId}`);
+  if (expBox) expBox.classList.remove('hidden');
+
+  updateQuizScoreUI();
+
+  if (Object.keys(quizUserAnswers).length === currentQuizData.questions.length) {
+    showQuizResults();
+  }
+}
+
+function updateQuizScoreUI() {
+  const total = currentQuizData ? currentQuizData.questions.length : 0;
+  const answered = Object.keys(quizUserAnswers).length;
+
+  quizQProgress.textContent = `${answered} of ${total} Answered`;
+  quizScoreCorrect.textContent = quizScore.correct;
+  quizScoreWrong.textContent = quizScore.wrong;
+}
+
+function showQuizResults() {
+  const total = currentQuizData.questions.length;
+  const percent = Math.round((quizScore.correct / total) * 100);
+
+  quizFinalScoreText.innerHTML = `You scored <strong class="text-white text-lg font-bold">${quizScore.correct} out of ${total}</strong> (${percent}%)`;
+  quizResultsCard.classList.remove('hidden');
+  quizResultsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showToast(`Quiz completed: ${percent}%!`, 'success');
+}
+
+// ----------------------------------------------------
+// DELETE INDIVIDUAL QUESTION FROM QUIZ
+// ----------------------------------------------------
+
+function handleDeleteSingleQuestion(questionId) {
+  if (!currentQuizData || !currentQuizData.questions) return;
+
+  const targetIndex = currentQuizData.questions.findIndex((q, idx) => (q.id || idx + 1) == questionId);
+  if (targetIndex === -1) return;
+
+  if (!confirm(`Delete question #${targetIndex + 1} from this quiz?`)) return;
+
+  // Remove question
+  currentQuizData.questions.splice(targetIndex, 1);
+  delete quizUserAnswers[questionId];
+
+  // Re-index remaining questions
+  currentQuizData.questions.forEach((q, idx) => {
+    q.id = idx + 1;
+  });
+  currentQuizData.total_questions = currentQuizData.questions.length;
+
+  // If this quiz was already in saved library, auto update in localStorage
+  if (currentQuizData.storageId) {
+    const list = getSavedQuizzes();
+    const item = list.find(s => s.id === currentQuizData.storageId);
+    if (item) {
+      item.questions = currentQuizData.questions;
+      item.total_questions = currentQuizData.questions.length;
+      localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
+    }
+  }
+
+  showToast('Question deleted from quiz.', 'success');
+  renderQuizPlayer();
+  updateQuizScoreUI();
+}
+
+// ----------------------------------------------------
+// FREE 1-CLICK HINDI TRANSLATION ENGINE
+// ----------------------------------------------------
+
+async function toggleQuestionLanguage(questionId) {
+  const question = currentQuizData.questions.find((q, idx) => (q.id || idx + 1) == questionId);
+  if (!question) return;
+
+  const btn = document.querySelector(`.translate-q-btn[data-qid="${questionId}"]`);
+  const label = btn ? btn.querySelector('.translate-q-label') : null;
+
+  if (question.hindi) {
+    question.isHindi = !question.isHindi;
+    updateQuestionCardDOM(question);
+    if (label) label.textContent = question.isHindi ? 'English' : 'हिंदी';
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = '...';
+
+  try {
+    const res = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: question.question,
+        options: question.options,
+        explanation: question.explanation,
+        target_lang: 'hi'
+      })
+    });
+
+    const data = await res.json();
+    if (data.question) {
+      question.hindi = data;
+      question.isHindi = true;
+      updateQuestionCardDOM(question);
+      if (label) label.textContent = 'English';
+      showToast('Question translated to Hindi!', 'success');
+    }
+  } catch (err) {
+    console.error('Translation failed:', err);
+    showToast('Translation error', 'error');
+    if (label) label.textContent = 'हिंदी';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function updateQuestionCardDOM(q) {
+  const qid = q.id;
+  const isHindi = q.isHindi;
+  const qText = isHindi && q.hindi ? q.hindi.question : q.question;
+  const qOptions = isHindi && q.hindi ? q.hindi.options : q.options;
+  const qExplanation = isHindi && q.hindi ? q.hindi.explanation : q.explanation;
+
+  const qTitleEl = document.getElementById(`q-text-${qid}`);
+  if (qTitleEl) qTitleEl.textContent = qText;
+
+  const expEl = document.getElementById(`exp-text-${qid}`);
+  if (expEl) expEl.textContent = qExplanation;
+
+  const group = document.getElementById(`options-group-${qid}`);
+  if (group) {
+    const btns = group.querySelectorAll('.quiz-option-btn');
+    btns.forEach((btn, i) => {
+      const opt = qOptions[i] || '';
+      const cleanOpt = opt.replace(/^[A-D]\)\s*/, '');
+      const span = btn.querySelector('span.flex-1');
+      if (span) span.textContent = cleanOpt;
+    });
+  }
+}
+
+async function toggleAllQuestionsLanguage() {
+  if (!currentQuizData || !currentQuizData.questions) return;
+
+  isGlobalHindi = !isGlobalHindi;
+  globalLangLabel.textContent = isGlobalHindi ? 'View in English' : 'All in Hindi';
+  showToast(isGlobalHindi ? 'Translating quiz to Hindi...' : 'Switched to English', 'success');
+
+  for (const q of currentQuizData.questions) {
+    if (isGlobalHindi) {
+      if (!q.hindi) {
+        try {
+          const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: q.question,
+              options: q.options,
+              explanation: q.explanation,
+              target_lang: 'hi'
+            })
+          });
+          const data = await res.json();
+          if (data.question) q.hindi = data;
+        } catch (e) {
+          continue;
+        }
+      }
+      q.isHindi = true;
+    } else {
+      q.isHindi = false;
+    }
+    updateQuestionCardDOM(q);
+
+    const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
+    if (btn) {
+      const label = btn.querySelector('.translate-q-label');
+      if (label) label.textContent = q.isHindi ? 'English' : 'हिंदी';
+    }
+  }
+}
+
+// ----------------------------------------------------
+// DEDICATED SAVED QUIZZES LIBRARY PAGE & FOLDERS
+// ----------------------------------------------------
+
+function getStoredSections() {
+  try {
+    const raw = localStorage.getItem('yt_quiz_sections');
+    return raw ? JSON.parse(raw) : DEFAULT_SECTIONS;
+  } catch (e) {
+    return DEFAULT_SECTIONS;
+  }
+}
+
+function saveStoredSections(sections) {
+  localStorage.setItem('yt_quiz_sections', JSON.stringify(sections));
+}
+
+function populateSectionDropdown() {
+  if (!quizSectionSelect) return;
+  const sections = getStoredSections().filter(s => s !== 'All');
+  quizSectionSelect.innerHTML = '';
+  sections.forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec;
+    opt.textContent = sec;
+    quizSectionSelect.appendChild(opt);
+  });
+}
+
+function handleCreateNewSection() {
+  const name = prompt('Enter new Section / Folder name (e.g. "Biology", "World History", "UPSC Paper 1"):');
+  if (!name || !name.trim()) return;
+
+  const clean = name.trim();
+  const sections = getStoredSections();
+  if (!sections.includes(clean)) {
+    sections.push(clean);
+    saveStoredSections(sections);
+    populateSectionDropdown();
+    renderLibrarySections();
+    showToast(`Created folder "${clean}"!`, 'success');
+  }
+}
+
+function renderLibrarySections() {
+  if (!librarySectionPills) return;
+  const sections = getStoredSections();
+  const allQuizzes = getSavedQuizzes();
+
+  librarySectionPills.innerHTML = '';
+
+  sections.forEach(sec => {
+    const count = sec === 'All' ? allQuizzes.length : allQuizzes.filter(q => (q.section || 'General') === sec).length;
+    const isActive = activeSectionFilter === sec;
+
+    const pill = document.createElement('button');
+    pill.className = `px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 text-xs ${
+      isActive
+        ? 'bg-cyan-500 text-slate-950 shadow-md'
+        : 'bg-surface-900 hover:bg-surface-800 text-slate-400 hover:text-white border border-surface-800'
+    }`;
+
+    pill.innerHTML = `
+      <span>${escapeHtml(sec)}</span>
+      <span class="text-[10px] opacity-75 font-mono">(${count})</span>
+    `;
+
+    pill.addEventListener('click', () => {
+      activeSectionFilter = sec;
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+    });
+
+    librarySectionPills.appendChild(pill);
+  });
+}
+
+function renderLibraryQuizzesGrid() {
+  const allQuizzes = getSavedQuizzes();
+  let quizzes = allQuizzes;
+
+  if (activeSectionFilter !== 'All') {
+    quizzes = allQuizzes.filter(q => (q.section || 'General') === activeSectionFilter);
+  }
+
+  libraryQuizzesGrid.innerHTML = '';
+
+  if (quizzes.length === 0) {
+    libraryQuizzesGrid.innerHTML = `
+      <div class="col-span-full text-center py-12 bg-surface-900/60 border border-surface-800 rounded-3xl p-6">
+        <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto mb-2 text-xl">
+          <i class="fa-solid fa-folder-open"></i>
+        </div>
+        <h4 class="font-bold text-white text-sm">No quizzes in "${activeSectionFilter}" folder</h4>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+          Extract a video, generate MCQs, and save them to this section.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  quizzes.forEach((quiz) => {
+    const card = document.createElement('div');
+    card.className = 'p-5 rounded-3xl bg-surface-900/90 border border-surface-700/80 hover:border-surface-600 transition-all shadow-xl flex flex-col justify-between gap-4 backdrop-blur-xl';
+
+    const sectionName = quiz.section || 'General';
+
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+          <div class="flex items-center gap-1.5">
+            <span class="text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full text-[10px]">
+              ${quiz.total_questions} Concept MCQs
+            </span>
+            <span class="text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px]">
+              <i class="fa-solid fa-folder text-[9px] mr-1"></i>${escapeHtml(sectionName)}
+            </span>
+          </div>
+          <span class="text-[11px]">${quiz.savedAt}</span>
+        </div>
+
+        <div class="flex items-start justify-between gap-2">
+          <h4 class="font-bold text-white text-sm sm:text-base line-clamp-2 leading-snug flex-1" id="lib-title-${quiz.id}">
+            ${escapeHtml(quiz.title)}
+          </h4>
+          <!-- Title Edit / Customization Button -->
+          <button class="edit-quiz-btn p-1.5 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" data-id="${quiz.id}" title="Rename quiz title or change folder">
+            <i class="fa-solid fa-pen-to-square text-xs"></i>
+          </button>
+        </div>
+
+        ${quiz.score ? `
+          <div class="mt-2.5 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-xl font-bold text-[11px]">
+            <i class="fa-solid fa-trophy text-[9px]"></i> Last Score: ${quiz.score}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-surface-800 gap-2">
+        <button class="flex-1 py-2 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
+          <i class="fa-solid fa-play text-[9px]"></i> Start Practice Arena
+        </button>
+
+        <button class="p-2 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs cursor-pointer download-saved-btn" data-id="${quiz.id}" title="Download JSON">
+          <i class="fa-solid fa-download"></i>
+        </button>
+
+        <button class="p-2 bg-surface-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-surface-700 rounded-xl text-xs cursor-pointer delete-saved-btn" data-id="${quiz.id}" title="Delete">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </div>
+    `;
+
+    libraryQuizzesGrid.appendChild(card);
+  });
+
+  // Attach actions
+  document.querySelectorAll('.play-saved-btn').forEach(btn => {
+    btn.addEventListener('click', () => loadSavedQuiz(btn.dataset.id));
+  });
+
+  document.querySelectorAll('.edit-quiz-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleEditQuiz(btn.dataset.id));
+  });
+
+  document.querySelectorAll('.download-saved-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = getSavedQuizzes().find(item => item.id === btn.dataset.id);
+      if (q) downloadBlob(JSON.stringify(q, null, 2), `${sanitizeFilename(q.title)}_quiz.json`, 'application/json');
+    });
+  });
+
+  document.querySelectorAll('.delete-saved-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteSavedQuiz(btn.dataset.id));
+  });
+}
+
+function handleEditQuiz(quizId) {
+  const quizzes = getSavedQuizzes();
+  const quiz = quizzes.find(q => q.id === quizId);
+  if (!quiz) return;
+
+  const newTitle = prompt('Rename Quiz Title:', quiz.title);
+  if (newTitle === null) return;
+
+  const sections = getStoredSections().filter(s => s !== 'All');
+  const newSection = prompt(`Change Folder (Available: ${sections.join(', ')}):`, quiz.section || 'General');
+
+  if (newTitle.trim()) {
+    quiz.title = newTitle.trim();
+  }
+  if (newSection && newSection.trim()) {
+    quiz.section = newSection.trim();
+    if (!sections.includes(quiz.section)) {
+      const allSec = getStoredSections();
+      allSec.push(quiz.section);
+      saveStoredSections(allSec);
+    }
+  }
+
+  localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+  renderLibrarySections();
+  renderLibraryQuizzesGrid();
+  showToast('Quiz details updated!', 'success');
+}
+
+function saveCurrentQuizLocally() {
+  if (!currentQuizData) {
+    showToast('No active quiz to save!', 'error');
+    return;
+  }
+
+  const savedList = getSavedQuizzes();
+  const storageId = currentQuizData.storageId || ('quiz_' + Date.now());
+
+  const quizRecord = {
+    id: storageId,
+    video_id: currentVideoId || currentQuizData.video_id || '',
+    title: currentQuizData.title || currentData?.title || 'Video Quiz',
+    section: currentQuizData.section || (quizSectionSelect ? quizSectionSelect.value : 'General'),
+    total_questions: currentQuizData.questions.length,
+    questions: currentQuizData.questions,
+    savedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    score: quizScore.correct > 0 ? `${quizScore.correct}/${currentQuizData.questions.length}` : null
+  };
+
+  currentQuizData.storageId = storageId;
+
+  // Replace if already exists, else unshift
+  const existingIndex = savedList.findIndex(s => s.id === storageId);
+  if (existingIndex !== -1) {
+    savedList[existingIndex] = quizRecord;
+  } else {
+    savedList.unshift(quizRecord);
+  }
+
+  localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+  updateSavedQuizBadge();
+  showToast('Quiz saved to your Library! Access anytime.', 'success');
+}
+
+function getSavedQuizzes() {
+  try {
+    const raw = localStorage.getItem('yt_saved_quizzes');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function updateSavedQuizBadge() {
+  const count = getSavedQuizzes().length;
+  if (savedQuizBadge) savedQuizBadge.textContent = count;
+}
+
+function loadSavedQuiz(quizId) {
+  const quizzes = getSavedQuizzes();
+  const quiz = quizzes.find(q => q.id === quizId);
+  if (!quiz) return;
+
+  currentQuizData = quiz;
+  currentQuizData.storageId = quiz.id;
+  activeQuizBadge.classList.remove('hidden');
+
+  if (quiz.video_id) {
+    currentVideoId = quiz.video_id;
+    initOrUpdatePlayer(quiz.video_id);
+  }
+
+  // Switch to Quiz Arena Page and launch immediately!
+  switchPage('quiz');
+  resetCurrentQuiz();
+  showToast(`Loaded "${quiz.title}"! Ready to practice.`, 'success');
+}
+
+function deleteSavedQuiz(quizId) {
+  if (!confirm('Are you sure you want to delete this saved quiz?')) return;
+  let quizzes = getSavedQuizzes().filter(q => q.id !== quizId);
+  localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+  updateSavedQuizBadge();
+  renderLibrarySections();
+  renderLibraryQuizzesGrid();
+  showToast('Quiz deleted from library.', 'success');
+}
+
+function handleImportQuizFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const imported = JSON.parse(event.target.result);
+      if (!imported.questions || !Array.isArray(imported.questions)) throw new Error('Invalid format');
+      
+      const storageId = 'quiz_' + Date.now();
+      imported.id = storageId;
+      imported.section = imported.section || 'General';
+      imported.savedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      const list = getSavedQuizzes();
+      list.unshift(imported);
+      localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
+
+      currentQuizData = imported;
+      currentQuizData.storageId = storageId;
+      activeQuizBadge.classList.remove('hidden');
+
+      updateSavedQuizBadge();
+      switchPage('quiz');
+      resetCurrentQuiz();
+      showToast(`Imported ${imported.questions.length} questions from file!`, 'success');
+    } catch (err) {
+      showToast('Could not load quiz JSON file.', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function downloadQuizAsJson() {
+  if (!currentQuizData) return;
+  downloadBlob(JSON.stringify(currentQuizData, null, 2), `${sanitizeFilename(currentQuizData.title)}_quiz.json`, 'application/json');
+}
+
+function downloadQuizAsPrintableText() {
+  if (!currentQuizData) return;
+
+  let text = `QUIZ: ${currentQuizData.title}\n`;
+  text += `Folder: ${currentQuizData.section || 'General'} | Total Questions: ${currentQuizData.questions.length}\n\n`;
+
+  currentQuizData.questions.forEach((q, idx) => {
+    text += `Q${idx + 1}. [${q.timestamp || '00:00'}] ${q.question}\n`;
+    q.options.forEach(opt => text += `   ${opt}\n`);
+    text += `\n`;
+  });
+
+  text += `\n--- ANSWER KEY & EXPLANATIONS ---\n\n`;
+  currentQuizData.questions.forEach((q, idx) => {
+    text += `Q${idx + 1}: ${q.correct_answer} (At ${q.timestamp}) - ${q.explanation}\n`;
+  });
+
+  downloadBlob(text, `${sanitizeFilename(currentQuizData.title)}_worksheet.txt`, 'text/plain');
+}
+
+function downloadBlob(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function parseTimestampToSeconds(ts) {
+  if (!ts) return 0;
+  const parts = ts.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return 0;
+}
+
 function highlightText(text, query) {
   if (!query) return escapeHtml(text);
   const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
@@ -325,7 +1176,7 @@ function highlightText(text, query) {
 }
 
 function escapeHtml(str) {
-  return str
+  return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -337,7 +1188,7 @@ function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// YouTube Player Controls & Side-by-Side Responsive Grid
+// YouTube Player
 function initOrUpdatePlayer(videoId) {
   if (typeof YT === 'undefined' || !YT.Player) {
     window.onYouTubeIframeAPIReady = () => initOrUpdatePlayer(videoId);
@@ -349,17 +1200,8 @@ function initOrUpdatePlayer(videoId) {
   } else {
     ytPlayer = new YT.Player('yt-player-target', {
       videoId: videoId,
-      playerVars: {
-        autoplay: 0,
-        controls: 1,
-        rel: 0,
-        modestbranding: 1
-      },
-      events: {
-        onReady: () => {
-          ytPlayerReady = true;
-        }
-      }
+      playerVars: { autoplay: 0, controls: 1, rel: 0 },
+      events: { onReady: () => { ytPlayerReady = true; } }
     });
   }
 }
@@ -367,30 +1209,12 @@ function initOrUpdatePlayer(videoId) {
 function togglePlayer() {
   const isHidden = playerContainer.classList.contains('hidden');
   if (isHidden) {
-    // Open player in side-by-side split grid on large screens
     playerContainer.classList.remove('hidden');
-    playerBtnLabel.textContent = 'Hide Video';
-    
-    workspaceGrid.classList.remove('grid-cols-1');
-    workspaceGrid.classList.add('lg:grid-cols-12');
-    
-    playerContainer.classList.add('lg:col-span-5');
-    transcriptMainCard.classList.add('lg:col-span-7');
-
-    if (currentVideoId) {
-      initOrUpdatePlayer(currentVideoId);
-    }
+    playerBtnLabel.textContent = 'Hide';
+    if (currentVideoId) initOrUpdatePlayer(currentVideoId);
   } else {
-    // Close player & restore full-width
     playerContainer.classList.add('hidden');
-    playerBtnLabel.textContent = 'Show Video Player';
-    
-    workspaceGrid.classList.remove('lg:grid-cols-12');
-    workspaceGrid.classList.add('grid-cols-1');
-
-    playerContainer.classList.remove('lg:col-span-5');
-    transcriptMainCard.classList.remove('lg:col-span-7');
-
+    playerBtnLabel.textContent = 'Video';
     if (ytPlayer && ytPlayerReady && typeof ytPlayer.pauseVideo === 'function') {
       ytPlayer.pauseVideo();
     }
@@ -398,73 +1222,27 @@ function togglePlayer() {
 }
 
 window.seekToTime = function(seconds) {
-  if (playerContainer.classList.contains('hidden')) {
-    togglePlayer();
-  }
+  if (playerContainer.classList.contains('hidden')) togglePlayer();
   if (ytPlayer && ytPlayerReady && typeof ytPlayer.seekTo === 'function') {
     ytPlayer.seekTo(seconds, true);
     ytPlayer.playVideo();
   }
 };
 
-// Copy actions
 function copyTranscript() {
   if (!currentData) return;
-
-  let textToCopy = '';
-  if (currentView === 'timeline') {
-    textToCopy = currentData.timestamped_text;
-  } else if (currentView === 'paragraph') {
-    textToCopy = currentData.paragraphs.map(p => `[${p.formatted_time}] ${p.text}`).join('\n\n');
-  } else {
-    textToCopy = currentData.plain_text;
-  }
-
-  navigator.clipboard.writeText(textToCopy).then(() => {
-    showToast('Full transcript copied to clipboard!', 'success');
-  }).catch(() => {
-    showToast('Failed to copy text', 'error');
+  navigator.clipboard.writeText(currentData.timestamped_text).then(() => {
+    showToast('Transcript copied!', 'success');
   });
 }
 
-function copyAiPrompt() {
-  if (!currentData) return;
-
-  const prompt = `Please provide a comprehensive, well-structured executive summary and detailed study notes for this YouTube video:
-
-Title: ${currentData.title}
-Channel: ${currentData.author}
-Total Duration: ${currentData.formatted_duration}
-
----
-TRANSCRIPT:
-${currentData.plain_text}
----
-
-Please provide:
-1. 💡 Executive Summary (3-4 concise sentences)
-2. 🔑 Top 5 Key Takeaways & Actionable Insights
-3. ⏱️ Detailed Chronological Outline (with timestamps for key points)
-4. 💬 Memorable Quotes / Core Messages`;
-
-  navigator.clipboard.writeText(prompt).then(() => {
-    showToast('AI-Ready Prompt copied! Paste directly into ChatGPT / Claude.', 'success');
-  }).catch(() => {
-    showToast('Failed to copy AI prompt', 'error');
-  });
-}
-
-// Download actions
 function downloadFile(format) {
   if (!currentData) return;
-
-  let content = '';
+  let content = currentData.timestamped_text;
   let filename = `${sanitizeFilename(currentData.title)}.${format}`;
   let mimeType = 'text/plain';
 
-  if (format === 'txt') {
-    content = `${currentData.title}\nChannel: ${currentData.author}\nDuration: ${currentData.formatted_duration}\n\n${currentData.timestamped_text}`;
-  } else if (format === 'srt') {
+  if (format === 'srt') {
     content = currentData.srt_content;
     mimeType = 'application/x-subrip';
   } else if (format === 'json') {
@@ -472,40 +1250,21 @@ function downloadFile(format) {
     mimeType = 'application/json';
   }
 
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  showToast(`Downloaded ${filename}`, 'success');
+  downloadBlob(content, filename, mimeType);
 }
 
 function sanitizeFilename(name) {
-  return name.replace(/[^a-z0-9_\-\s]/gi, '').trim().substring(0, 50) || 'transcript';
+  return name.replace(/[^a-z0-9_\-\s]/gi, '').trim().substring(0, 40) || 'transcript';
 }
 
-// Toast notification
 let toastTimeout = null;
 function showToast(msg, type = 'success') {
   clearTimeout(toastTimeout);
   toastMessage.textContent = msg;
-
-  if (type === 'success') {
-    toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-base';
-  } else {
-    toastIcon.className = 'fa-solid fa-triangle-exclamation text-rose-400 text-base';
-  }
-
   toast.classList.remove('translate-y-20', 'opacity-0');
   toast.classList.add('translate-y-0', 'opacity-100');
-
   toastTimeout = setTimeout(() => {
     toast.classList.remove('translate-y-0', 'opacity-100');
     toast.classList.add('translate-y-20', 'opacity-0');
-  }, 2800);
+  }, 2500);
 }

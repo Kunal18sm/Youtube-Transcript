@@ -51,3 +51,29 @@ mark.search-highlight {
 .animate-spin-slow {
   animation: spinSlow 3.5s linear infinite;
 }
+
+/* FadeIn Animation for Quiz Explanations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* Quiz Option Hover/Active Effects */
+.quiz-option-btn {
+  transition: all 0.15s ease-in-out;
+}
+
+.quiz-option-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}

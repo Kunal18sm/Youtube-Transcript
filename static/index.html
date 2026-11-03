@@ -2,15 +2,22 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Transcript Pro — Free, Fast & Unlimited</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>YT Transcript Pro & AI Quiz Arena</title>
   
-  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <!-- PWA Manifest & Meta -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#07090e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <!-- Premium Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   
-  <!-- Tailwind CSS CDN -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -24,7 +31,6 @@
           colors: {
             brand: {
               50: '#fff1f2',
-              100: '#ffe4e6',
               500: '#f43f5e',
               600: '#e11d48',
               700: '#be123c',
@@ -34,6 +40,7 @@
               900: '#0c101a',
               850: '#111726',
               800: '#192237',
+              750: '#1e293b',
               700: '#253350',
               600: '#384b70'
             }
@@ -43,11 +50,10 @@
     }
   </script>
   
-  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body class="bg-surface-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white relative overflow-x-hidden">
+<body class="bg-surface-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white relative overflow-x-hidden pb-16 sm:pb-0">
 
   <!-- Ambient Light Mesh Background -->
   <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
@@ -57,374 +63,464 @@
     <div class="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-25"></div>
   </div>
 
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-screen">
+  <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col min-h-screen">
     
-    <!-- Navbar Header -->
-    <header class="flex items-center justify-between pb-6 border-b border-surface-800/80">
-      <div class="flex items-center space-x-3.5">
-        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-rose-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/25 ring-1 ring-white/20">
-          <i class="fa-brands fa-youtube text-2xl text-white"></i>
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
-              YT Transcript <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-red-400 to-amber-400">Pro</span>
-            </h1>
-            <span class="text-[10px] uppercase font-bold tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-0.5 rounded-full shadow-sm">
-              100% Free
-            </span>
+    <!-- Top Header -->
+    <header class="flex flex-col sm:flex-row items-center justify-between pb-4 sm:pb-6 border-b border-surface-800/80 gap-3">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center justify-between w-full sm:w-auto">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/25 ring-1 ring-white/20">
+            <i class="fa-brands fa-youtube text-xl text-white"></i>
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">Instant timestamps & full transcript for any YouTube video (even 2h+ long)</p>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-white">
+                YT Transcript <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-red-400 to-amber-400">Pro</span>
+              </h1>
+              <span class="text-[9px] uppercase font-bold tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded-full shadow-sm">
+                PWA
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">Transcripts & Topic MCQs (5 to 500 questions)</p>
+          </div>
         </div>
+
+        <!-- PWA Install Button (Mobile / Desktop) -->
+        <button id="pwa-install-btn" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer ring-1 ring-white/20">
+          <i class="fa-solid fa-mobile-screen-button text-xs"></i>
+          <span>Install App</span>
+        </button>
       </div>
 
-      <div class="flex items-center space-x-3">
-        <div class="hidden sm:flex items-center gap-2 text-xs bg-surface-900 border border-surface-700/80 px-3.5 py-1.5 rounded-xl text-emerald-400 font-medium shadow-inner">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-          <span>Engine Online</span>
-        </div>
-        <a href="#how-it-works" class="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700/60 transition-colors">
-          <i class="fa-solid fa-circle-info mr-1.5 text-slate-500"></i> How it works
-        </a>
-      </div>
+      <!-- Navigation Bar (Desktop) -->
+      <nav class="flex items-center bg-surface-900/90 border border-surface-700/80 p-1 rounded-2xl shadow-inner w-full sm:w-auto justify-center">
+        <button id="nav-home-btn" class="nav-page-btn active flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-white bg-surface-800 shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-file-lines text-rose-400"></i>
+          <span>Transcript</span>
+        </button>
+
+        <button id="nav-quiz-btn" class="nav-page-btn flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-graduation-cap text-amber-400"></i>
+          <span>Quiz Arena</span>
+          <span id="active-quiz-badge" class="hidden w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        </button>
+
+        <button id="nav-library-btn" class="nav-page-btn flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-folder-bookmark text-cyan-400"></i>
+          <span>Library</span>
+          <span id="saved-quiz-badge" class="bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded-full text-[10px] font-bold">0</span>
+        </button>
+      </nav>
+
     </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 py-10">
-      
-      <!-- Hero Section -->
-      <section class="max-w-3xl mx-auto text-center mb-12">
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold mb-4 shadow-sm">
-          <i class="fa-solid fa-bolt text-amber-400 text-[11px]"></i>
-          <span>Supports 2 to 5+ Hour Long Podcasts & Courses in ~2 Seconds</span>
-        </div>
+    <!-- Main Content Body (3 Dedicated Pages) -->
+    <main class="flex-1 py-6 sm:py-8">
 
-        <h2 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-4 leading-tight">
-          Turn Any YouTube Video Into <br class="hidden sm:block">
-          <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-amber-300 to-cyan-400">
-            Searchable Timestamped Text
-          </span>
-        </h2>
-        <p class="text-sm sm:text-base text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed">
-          Paste any YouTube link below to extract complete spoken words with exact timestamps, synchronized video playback, and 1-click ChatGPT summary prompts.
-        </p>
+      <!-- ============================================================== -->
+      <!-- PAGE 1: TRANSCRIPT & VIDEO EXTRACTOR PAGE -->
+      <!-- ============================================================== -->
+      <section id="page-home" class="page-view space-y-6">
+        
+        <!-- Search Input Hero -->
+        <div class="max-w-3xl mx-auto text-center space-y-3">
+          <h2 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Extract Transcripts & <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-amber-300 to-cyan-400">Topic MCQs</span>
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+            Extract timestamped text or generate 5 to 500+ pure concept MCQs with 1-click Hindi translation.
+          </p>
 
-        <!-- Input Bar Card -->
-        <form id="transcript-form" class="relative group max-w-2xl mx-auto">
-          <div class="relative flex items-center shadow-2xl shadow-rose-950/20 rounded-2xl p-2 bg-surface-900/90 border border-surface-700/90 backdrop-blur-xl focus-within:border-rose-500 focus-within:ring-4 focus-within:ring-rose-500/15 transition-all duration-300">
-            <div class="pl-3.5 pr-2 text-slate-400 group-focus-within:text-rose-400 transition-colors">
-              <i class="fa-solid fa-link text-lg"></i>
-            </div>
-            
-            <input 
-              type="text" 
-              id="video-url" 
-              placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=...)" 
-              class="w-full bg-transparent border-0 text-white placeholder-slate-500 text-sm sm:text-base px-2 py-3 focus:outline-none focus:ring-0 font-medium"
-              autocomplete="off"
-              required
-            />
-
-            <!-- Clear input button -->
-            <button 
-              type="button" 
-              id="clear-btn" 
-              class="hidden px-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="Clear input"
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-
-            <!-- Submit Button -->
-            <button 
-              type="submit" 
-              id="fetch-btn" 
-              class="ml-2 px-6 sm:px-8 py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-sm shadow-lg shadow-rose-600/30 active:scale-[0.98] transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ring-1 ring-white/20"
-            >
-              <span id="btn-text">Get Transcript</span>
-              <i class="fa-solid fa-arrow-right text-xs transition-transform group-hover:translate-x-1"></i>
-            </button>
-          </div>
-        </form>
-
-        <!-- Quick Test Pills -->
-        <div class="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
-          <span class="text-slate-500 font-medium">Quick examples:</span>
-          <button class="sample-btn px-3 py-1.5 bg-surface-900 hover:bg-surface-800 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer" data-url="https://www.youtube.com/watch?v=rfscVS0vtbw">
-            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> ⚡ 4.5h Long Python Course
-          </button>
-          <button class="sample-btn px-3 py-1.5 bg-surface-900 hover:bg-surface-800 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Me at the zoo (Short)
-          </button>
-          <button class="sample-btn px-3 py-1.5 bg-surface-900 hover:bg-surface-800 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer" data-url="https://www.youtube.com/watch?v=kJQP7kiw5Fk">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Music Video (Despacito)
-          </button>
-        </div>
-      </section>
-
-      <!-- Loading State -->
-      <section id="loading-state" class="hidden max-w-lg mx-auto my-12 text-center p-8 bg-surface-900/80 rounded-3xl border border-surface-700/80 backdrop-blur-xl shadow-2xl">
-        <div class="relative w-20 h-20 mx-auto mb-5">
-          <div class="w-20 h-20 rounded-full border-4 border-surface-800 border-t-rose-500 animate-spin"></div>
-          <div class="absolute inset-0 flex items-center justify-center">
-            <i class="fa-solid fa-bolt text-rose-500 text-xl animate-pulse"></i>
-          </div>
-        </div>
-        <h3 id="loading-title" class="text-xl font-bold text-white mb-1.5">Extracting Video Transcript...</h3>
-        <p id="loading-desc" class="text-xs sm:text-sm text-slate-400">Connecting to YouTube timed-text streams and formatting timestamps...</p>
-      </section>
-
-      <!-- Error State -->
-      <section id="error-state" class="hidden max-w-2xl mx-auto my-8 p-6 bg-red-950/40 border border-red-500/30 rounded-3xl text-red-200 backdrop-blur-xl shadow-xl">
-        <div class="flex items-start gap-4">
-          <div class="p-3 rounded-2xl bg-red-500/20 text-red-400 shrink-0">
-            <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
-          </div>
-          <div class="flex-1">
-            <h4 class="font-bold text-white text-base" id="error-title">Could not retrieve transcript</h4>
-            <p class="text-xs sm:text-sm text-red-300 mt-1.5 leading-relaxed" id="error-message">Subtitles might be disabled on this video by the creator.</p>
-            <div class="mt-4 flex gap-3">
-              <button id="error-retry" class="text-xs bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl transition-all font-semibold shadow-md cursor-pointer">
-                Try Another Video
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Results Section (Visible after transcript loads) -->
-      <section id="result-section" class="hidden space-y-6">
-
-        <!-- Video Metadata Overview Header Card -->
-        <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl">
-          <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-            
-            <!-- Video Info & Thumbnail -->
-            <div class="flex items-start sm:items-center space-x-4 sm:space-x-5">
-              <div class="relative group shrink-0 w-32 sm:w-44 aspect-video rounded-2xl overflow-hidden bg-black border border-surface-700 shadow-xl">
-                <img id="meta-thumb" src="" alt="Thumbnail" class="w-full h-full object-cover">
-                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span class="w-10 h-10 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg">
-                    <i class="fa-solid fa-play text-sm ml-0.5"></i>
-                  </span>
-                </div>
-              </div>
-              <div>
-                <span id="meta-author" class="text-xs font-semibold text-rose-400 uppercase tracking-wider">Channel Name</span>
-                <h3 id="meta-title" class="text-base sm:text-xl font-bold text-white line-clamp-2 leading-snug mt-1">
-                  Video Title
-                </h3>
-                
-                <!-- Metrics Badges -->
-                <div class="flex flex-wrap items-center gap-2.5 text-xs text-slate-300 mt-3 font-medium">
-                  <span class="flex items-center gap-1.5 bg-surface-800/90 border border-surface-700/60 px-3 py-1.5 rounded-xl">
-                    <i class="fa-regular fa-clock text-rose-400"></i>
-                    <span class="text-slate-400">Duration:</span>
-                    <strong id="stat-duration" class="text-white font-mono">00:00:00</strong>
-                  </span>
-                  <span class="flex items-center gap-1.5 bg-surface-800/90 border border-surface-700/60 px-3 py-1.5 rounded-xl">
-                    <i class="fa-solid fa-file-lines text-amber-400"></i>
-                    <strong id="stat-words" class="text-white">0</strong> words
-                  </span>
-                  <span class="flex items-center gap-1.5 bg-surface-800/90 border border-surface-700/60 px-3 py-1.5 rounded-xl">
-                    <i class="fa-solid fa-book-open-reader text-cyan-400"></i>
-                    ~<strong id="stat-reading" class="text-white">0</strong> min read
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Controls: Language & Layout Toggles -->
-            <div class="flex flex-wrap items-center gap-3 self-stretch lg:self-center justify-end border-t lg:border-t-0 pt-4 lg:pt-0 border-surface-800">
+          <!-- Input Bar -->
+          <form id="transcript-form" class="relative group max-w-2xl mx-auto pt-1">
+            <div class="relative flex items-center shadow-2xl shadow-rose-950/20 rounded-2xl p-1.5 sm:p-2 bg-surface-900/90 border border-surface-700/90 backdrop-blur-xl focus-within:border-rose-500 focus-within:ring-4 focus-within:ring-rose-500/15 transition-all">
+              <i class="fa-solid fa-link text-slate-500 ml-3 mr-2 text-sm group-focus-within:text-rose-400"></i>
               
-              <!-- Language Selector -->
-              <div class="flex items-center gap-2 bg-surface-850 border border-surface-700 rounded-xl px-3.5 py-2.5 text-xs shadow-sm">
-                <i class="fa-solid fa-globe text-rose-400"></i>
-                <label for="language-select" class="text-slate-400 font-medium">Language:</label>
-                <select id="language-select" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                  <!-- Dynamic languages -->
-                </select>
-              </div>
+              <input 
+                type="text" 
+                id="video-url" 
+                placeholder="Paste YouTube video link..." 
+                class="w-full bg-transparent border-0 text-white placeholder-slate-500 text-xs sm:text-base px-1 py-2 focus:outline-none focus:ring-0 font-medium"
+                autocomplete="off"
+                required
+              />
 
-              <!-- Video Sync Toggle Button -->
-              <button id="toggle-player-btn" class="px-4 py-2.5 bg-surface-850 hover:bg-surface-800 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shadow-sm cursor-pointer">
-                <i class="fa-solid fa-video text-rose-400"></i>
-                <span id="player-btn-label">Show Video Player</span>
+              <button type="button" id="clear-btn" class="hidden px-2 text-slate-400 hover:text-white transition-colors cursor-pointer" title="Clear">
+                <i class="fa-solid fa-xmark"></i>
               </button>
 
+              <button 
+                type="submit" 
+                id="fetch-btn" 
+                class="ml-1 sm:ml-2 px-4 sm:px-7 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              >
+                <span>Extract</span>
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+              </button>
+            </div>
+          </form>
+
+          <!-- Quick Samples -->
+          <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400 pt-1">
+            <span class="text-slate-500 text-[11px]">Quick:</span>
+            <button class="sample-btn px-2.5 py-0.5 bg-surface-900 hover:bg-surface-800 text-slate-300 rounded-lg text-xs border border-surface-700/80 cursor-pointer" data-url="https://www.youtube.com/watch?v=rfscVS0vtbw">
+              Python Course (Long)
+            </button>
+            <button class="sample-btn px-2.5 py-0.5 bg-surface-900 hover:bg-surface-800 text-slate-300 rounded-lg text-xs border border-surface-700/80 cursor-pointer" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw">
+              Classic (Short)
+            </button>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden max-w-sm mx-auto text-center py-8 p-6 bg-surface-900/80 rounded-3xl border border-surface-700/80 backdrop-blur-xl shadow-2xl">
+          <div class="w-12 h-12 border-3 border-surface-800 border-t-rose-500 rounded-full animate-spin mx-auto mb-3"></div>
+          <h3 class="text-base font-bold text-white mb-1">Extracting Transcript...</h3>
+          <p class="text-xs text-slate-400">Loading dialogue from YouTube...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden max-w-xl mx-auto p-4 bg-red-950/40 border border-red-500/30 rounded-2xl text-red-200">
+          <div class="flex items-start gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 text-base mt-0.5"></i>
+            <div class="flex-1 text-xs">
+              <h4 class="font-bold text-white" id="error-title">Could not load video</h4>
+              <p class="text-red-300 mt-0.5" id="error-message">Subtitles might be disabled on this video.</p>
+              <button id="error-retry" class="mt-2 text-xs bg-red-600 text-white px-2.5 py-1 rounded-lg font-semibold">Try Another</button>
             </div>
           </div>
         </div>
 
-        <!-- Dynamic Grid: Side-by-Side when video is open -->
-        <div id="workspace-grid" class="grid grid-cols-1 gap-6 transition-all">
-          
-          <!-- Embedded YouTube Player Card (Sticky when enabled) -->
-          <div id="player-container" class="hidden bg-surface-900/90 border border-surface-700/80 rounded-3xl p-5 shadow-2xl backdrop-blur-xl transition-all self-start lg:sticky lg:top-6">
-            <div class="flex items-center justify-between pb-3 mb-3 border-b border-surface-800 text-xs">
-              <span class="text-slate-300 font-semibold flex items-center gap-2">
-                <i class="fa-solid fa-arrows-rotate text-rose-400 animate-spin-slow"></i>
-                Click any timestamp in the transcript to jump here!
-              </span>
-              <button id="close-player-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer">
-                <i class="fa-solid fa-xmark text-sm"></i>
-              </button>
+        <!-- Results View -->
+        <div id="result-section" class="hidden space-y-5">
+
+          <!-- Video Metadata Header -->
+          <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-4 sm:p-5 shadow-xl backdrop-blur-xl">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              
+              <div class="flex items-start space-x-3 sm:space-x-4">
+                <div class="relative shrink-0 w-24 sm:w-36 aspect-video rounded-xl overflow-hidden bg-black border border-surface-700">
+                  <img id="meta-thumb" src="" alt="Thumbnail" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <span id="meta-author" class="text-[11px] font-semibold text-rose-400 uppercase tracking-wider">Channel Name</span>
+                  <h3 id="meta-title" class="text-sm sm:text-base font-bold text-white line-clamp-2 mt-0.5">
+                    Video Title
+                  </h3>
+                  
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-slate-300 mt-1.5 font-medium">
+                    <span class="flex items-center gap-1 bg-surface-800 px-2 py-0.5 rounded-lg text-[11px]">
+                      <i class="fa-regular fa-clock text-rose-400"></i>
+                      <strong id="stat-duration" class="font-mono">00:00:00</strong>
+                    </span>
+                    <span class="flex items-center gap-1 bg-surface-800 px-2 py-0.5 rounded-lg text-[11px]">
+                      <i class="fa-solid fa-file-lines text-amber-400"></i>
+                      <strong id="stat-words">0</strong> words
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="flex items-center gap-2 self-stretch sm:self-center justify-end flex-wrap pt-2 sm:pt-0 border-t sm:border-t-0 border-surface-800">
+                <select id="language-select" class="bg-surface-850 border border-surface-700 text-white text-xs rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none cursor-pointer">
+                </select>
+
+                <button id="toggle-player-btn" class="px-3 py-1.5 bg-surface-850 hover:bg-surface-800 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer">
+                  <i class="fa-solid fa-video text-rose-400 mr-1"></i>
+                  <span id="player-btn-label">Video</span>
+                </button>
+
+                <button id="jump-to-quiz-btn" class="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer">
+                  <i class="fa-solid fa-graduation-cap mr-1"></i>
+                  <span>Quiz Arena ✨</span>
+                </button>
+              </div>
             </div>
-            <div class="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-inner ring-1 ring-white/10">
+          </div>
+
+          <!-- Video Player (Collapsible) -->
+          <div id="player-container" class="hidden bg-surface-900 border border-surface-700 rounded-3xl p-3 sm:p-4 shadow-xl">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-surface-800 text-xs text-slate-400">
+              <span>Video Sync (Click timestamps to seek)</span>
+              <button id="close-player-btn" class="hover:text-white p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="aspect-video w-full max-w-2xl mx-auto rounded-xl overflow-hidden bg-black shadow-inner">
               <div id="yt-player-target" class="w-full h-full"></div>
             </div>
           </div>
 
-          <!-- Transcript Container -->
-          <div id="transcript-main-card" class="bg-surface-900/90 border border-surface-700/80 rounded-3xl shadow-2xl overflow-hidden backdrop-blur-xl">
-            
-            <!-- Toolbar -->
-            <div class="p-4 sm:p-5 border-b border-surface-800 bg-surface-850/70 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
-              
-              <!-- Left: View Modes -->
-              <div class="flex items-center bg-surface-950 p-1.5 rounded-2xl border border-surface-700/80 shrink-0 shadow-inner">
-                <button data-view="timeline" class="view-tab active px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-white bg-surface-800 shadow-md flex items-center gap-2 cursor-pointer">
-                  <i class="fa-solid fa-timeline text-[11px] text-rose-400"></i> Timeline
-                </button>
-                <button data-view="paragraph" class="view-tab px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2 cursor-pointer">
-                  <i class="fa-solid fa-align-left text-[11px]"></i> Paragraphs
-                </button>
-                <button data-view="raw" class="view-tab px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2 cursor-pointer">
-                  <i class="fa-solid fa-file-lines text-[11px]"></i> Clean Text
-                </button>
+          <!-- Transcript Card -->
+          <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl shadow-xl overflow-hidden backdrop-blur-xl">
+            <div class="p-3 sm:p-4 border-b border-surface-800 bg-surface-850/70 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div class="flex items-center gap-2 font-bold text-white text-xs sm:text-sm">
+                <i class="fa-solid fa-file-lines text-rose-400"></i>
+                <span>Transcript Dialogue</span>
               </div>
 
-              <!-- Center: Live Search Bar -->
-              <div class="relative flex-1 max-w-lg">
-                <div class="relative flex items-center">
-                  <i class="fa-solid fa-magnifying-glass absolute left-3.5 text-slate-500 text-xs"></i>
-                  <input 
-                    type="text" 
-                    id="search-input" 
-                    placeholder="Search inside transcript (e.g. key topics, words)..." 
-                    class="w-full bg-surface-950/90 border border-surface-700 rounded-xl pl-9 pr-20 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
-                  />
-                  <div id="search-count" class="hidden absolute right-3 text-[11px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">
-                    0
-                  </div>
-                </div>
-              </div>
+              <!-- Search Bar & Actions -->
+              <div class="flex items-center gap-2">
+                <input 
+                  type="text" 
+                  id="search-input" 
+                  placeholder="Search dialogue..." 
+                  class="bg-surface-950 border border-surface-700 rounded-xl px-2.5 py-1 text-xs text-white placeholder-slate-500 w-full sm:w-52 focus:outline-none focus:border-rose-500"
+                />
 
-              <!-- Right: Quick Action Buttons -->
-              <div class="flex items-center flex-wrap gap-2.5 shrink-0">
-                
-                <!-- Copy Transcript -->
-                <button id="copy-btn" class="px-3.5 py-2 bg-surface-800 hover:bg-surface-700 active:scale-95 text-white border border-surface-600 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shadow-sm cursor-pointer">
-                  <i class="fa-regular fa-clone text-slate-300"></i>
-                  <span>Copy</span>
+                <button id="copy-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-700 text-white border border-surface-600 rounded-xl text-xs font-semibold cursor-pointer">
+                  Copy
                 </button>
 
-                <!-- AI Summary Prompt Button -->
-                <button id="ai-prompt-btn" class="px-4 py-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2 cursor-pointer ring-1 ring-white/20" title="Format full transcript for ChatGPT / Claude with summary instructions">
-                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-xs"></i>
-                  <span>AI Prompt</span>
-                </button>
-
-                <!-- Export / Download Dropdown -->
                 <div class="relative" id="export-dropdown-wrapper">
-                  <button id="export-dropdown-btn" class="px-3.5 py-2 bg-surface-800 hover:bg-surface-700 text-white border border-surface-600 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shadow-sm cursor-pointer">
-                    <i class="fa-solid fa-download text-slate-300"></i>
-                    <span>Export</span>
-                    <i class="fa-solid fa-chevron-down text-[10px] ml-0.5"></i>
+                  <button id="export-dropdown-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-700 text-white border border-surface-600 rounded-xl text-xs font-semibold cursor-pointer">
+                    Export <i class="fa-solid fa-chevron-down text-[9px] ml-0.5"></i>
                   </button>
-                  <div id="export-menu" class="hidden absolute right-0 mt-2 w-48 bg-surface-850 border border-surface-700 rounded-2xl shadow-2xl py-1.5 z-20 backdrop-blur-xl">
-                    <button id="download-txt" class="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-surface-750 flex items-center gap-2.5 cursor-pointer">
-                      <i class="fa-solid fa-file-text text-amber-400"></i> Plain Text (.txt)
-                    </button>
-                    <button id="download-srt" class="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-surface-750 flex items-center gap-2.5 cursor-pointer">
-                      <i class="fa-solid fa-closed-captioning text-rose-400"></i> Subtitle File (.srt)
-                    </button>
-                    <button id="download-json" class="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-surface-750 flex items-center gap-2.5 cursor-pointer">
-                      <i class="fa-solid fa-code text-cyan-400"></i> JSON Data (.json)
-                    </button>
+                  <div id="export-menu" class="hidden absolute right-0 mt-1 w-36 bg-surface-850 border border-surface-700 rounded-xl shadow-xl py-1 z-20">
+                    <button id="download-txt" class="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-surface-800 cursor-pointer">Text (.txt)</button>
+                    <button id="download-srt" class="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-surface-800 cursor-pointer">Subtitles (.srt)</button>
+                    <button id="download-json" class="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-surface-800 cursor-pointer">JSON Data</button>
                   </div>
                 </div>
-
               </div>
-
             </div>
 
-            <!-- Transcript Scrollable Body -->
-            <div id="transcript-body" class="p-6 max-h-[680px] overflow-y-auto space-y-2.5 custom-scrollbar text-sm leading-relaxed text-slate-200">
-              <!-- Rendered snippets -->
+            <!-- Scrollable Body -->
+            <div id="transcript-body" class="p-4 sm:p-6 max-h-[550px] overflow-y-auto space-y-2 custom-scrollbar text-xs sm:text-sm leading-relaxed text-slate-200">
             </div>
-
           </div>
 
         </div>
 
       </section>
 
-      <!-- Why Choose Us / Features -->
-      <section id="how-it-works" class="mt-20 pt-14 border-t border-surface-800/80">
-        <div class="text-center mb-10">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-900 border border-surface-700 text-slate-400 text-xs font-semibold mb-3">
-            <i class="fa-solid fa-circle-check text-emerald-400"></i> Zero Limitations
+      <!-- ============================================================== -->
+      <!-- PAGE 2: DEDICATED QUIZ & PRACTICE ARENA -->
+      <!-- ============================================================== -->
+      <section id="page-quiz" class="page-view hidden space-y-6">
+        
+        <!-- Quiz Generator Config (When no active quiz) -->
+        <div id="quiz-config-card" class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-6 sm:p-8 max-w-xl mx-auto shadow-2xl text-center backdrop-blur-xl">
+          <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-3 text-2xl shadow-lg shadow-amber-500/10">
+            <i class="fa-solid fa-brain"></i>
           </div>
-          <h3 class="text-2xl sm:text-3xl font-extrabold text-white">Engineered for Speed & Accuracy</h3>
-          <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-xl mx-auto">Extract complete transcripts without paying for Whisper API bills or waiting 20 minutes.</p>
-        </div>
+          
+          <h3 class="text-xl font-extrabold text-white mb-1.5">
+            MCQ Quiz <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-rose-400 to-indigo-400">Generator</span>
+          </h3>
+          <p class="text-xs text-slate-400 mb-5 max-w-sm mx-auto">
+            Extracts pure educational questions in English with 1-click Hindi translation.
+          </p>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="p-6 rounded-3xl bg-surface-900/80 border border-surface-800 hover:border-surface-700 transition-all shadow-xl">
-            <div class="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mb-4 text-xl">
+          <div class="bg-surface-950/80 border border-surface-800 p-4 rounded-2xl text-left space-y-3 mb-5">
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">
+                <i class="fa-solid fa-list-ol text-amber-400 mr-1"></i> Question Count (5 to 500)
+              </label>
+              <div class="flex items-center gap-2">
+                <select id="quiz-count-select" class="flex-1 bg-surface-900 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 cursor-pointer">
+                  <option value="10">10 Questions (Quick Review)</option>
+                  <option value="25" selected>25 Questions (Standard)</option>
+                  <option value="50">50 Questions (Deep Practice)</option>
+                  <option value="100">100 Questions (Full Chapter Exam)</option>
+                  <option value="200">200 Questions (Mastery)</option>
+                  <option value="500">⚡ 500 Questions (Exhaustive Coverage)</option>
+                  <option value="custom">Custom Count...</option>
+                </select>
+                <input 
+                  type="number" 
+                  id="custom-count-input" 
+                  min="5" 
+                  max="500" 
+                  placeholder="e.g. 75" 
+                  class="hidden w-24 bg-surface-900 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <!-- Target Folder / Section Tag -->
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">
+                <i class="fa-solid fa-folder text-cyan-400 mr-1"></i> Save to Folder / Section:
+              </label>
+              <select id="quiz-section-select" class="w-full bg-surface-900 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 cursor-pointer">
+                <option value="General" selected>General</option>
+                <option value="History">History</option>
+                <option value="Coding & Tech">Coding & Tech</option>
+                <option value="Science">Science</option>
+                <option value="UPSC & Exams">UPSC & Exams</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center gap-3">
+            <button id="generate-quiz-btn" class="px-7 py-3 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
               <i class="fa-solid fa-bolt"></i>
-            </div>
-            <h4 class="font-bold text-white text-base mb-2">Instant for 2+ Hour Videos</h4>
-            <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Fetches verified high-precision caption streams directly from YouTube's timed-text servers. 50,000 words extracted in ~2 seconds.
-            </p>
+              <span>Generate Pure Concept MCQs</span>
+            </button>
           </div>
 
-          <div class="p-6 rounded-3xl bg-surface-900/80 border border-surface-800 hover:border-surface-700 transition-all shadow-xl">
-            <div class="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4 text-xl">
-              <i class="fa-solid fa-wand-magic-sparkles"></i>
-            </div>
-            <h4 class="font-bold text-white text-base mb-2">Pre-Engineered AI Prompts</h4>
-            <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Don't just copy plain text—get a ready-to-paste prompt with instructions for ChatGPT or Claude to extract key insights, quotes, and timestamps.
-            </p>
-          </div>
-
-          <div class="p-6 rounded-3xl bg-surface-900/80 border border-surface-800 hover:border-surface-700 transition-all shadow-xl">
-            <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mb-4 text-xl">
-              <i class="fa-solid fa-clapperboard"></i>
-            </div>
-            <h4 class="font-bold text-white text-base mb-2">Video Editor Ready (SRT)</h4>
-            <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Download complete `.srt` subtitle files with millisecond accuracy to import directly into Premiere Pro, DaVinci Resolve, or CapCut.
-            </p>
+          <!-- Loading Spinner -->
+          <div id="quiz-loading-spinner" class="hidden mt-5 pt-4 border-t border-surface-800">
+            <div class="w-8 h-8 border-3 border-surface-700 border-t-amber-400 rounded-full animate-spin mx-auto mb-2"></div>
+            <p class="text-xs font-semibold text-amber-300 animate-pulse" id="quiz-loading-msg">Extracting concept questions across video timeline...</p>
+            <p class="text-[11px] text-slate-500 mt-1">Generating pure topic MCQs in parallel batches...</p>
           </div>
         </div>
+
+        <!-- Quiz Arena Player (When Quiz is Active) -->
+        <div id="quiz-player-card" class="hidden space-y-4">
+          
+          <!-- Sticky Header Control Bar -->
+          <div class="bg-surface-900/90 border border-surface-700/80 rounded-2xl p-4 shadow-xl backdrop-blur-xl flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 id="active-quiz-title" class="font-extrabold text-white text-sm sm:text-base">Video Quiz</h3>
+                <span id="active-quiz-section-badge" class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold">General</span>
+              </div>
+              <div class="flex items-center gap-2.5 text-xs text-slate-400 mt-0.5">
+                <span id="quiz-q-progress">0 of 0 Answered</span>
+                <span>•</span>
+                <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i><span id="quiz-score-correct">0</span></span>
+                <span>•</span>
+                <span class="text-rose-400 font-semibold"><i class="fa-solid fa-circle-xmark mr-1"></i><span id="quiz-score-wrong">0</span></span>
+              </div>
+            </div>
+
+            <!-- Quiz Arena Action Buttons -->
+            <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
+              
+              <!-- Global Hindi / English Toggle -->
+              <button id="toggle-all-hindi-btn" class="px-2.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-language text-xs"></i>
+                <span id="global-lang-label">All in Hindi</span>
+              </button>
+
+              <button id="save-quiz-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-semibold cursor-pointer">
+                <i class="fa-regular fa-bookmark mr-1"></i> Save
+              </button>
+
+              <button id="download-quiz-text-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer" title="Download Worksheet">
+                <i class="fa-solid fa-file-lines text-amber-400"></i>
+              </button>
+
+              <button id="download-quiz-json-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer" title="Download JSON">
+                <i class="fa-solid fa-code text-cyan-400"></i>
+              </button>
+
+              <button id="retake-quiz-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer" title="Reset Quiz">
+                <i class="fa-solid fa-rotate-right text-rose-400"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Questions List -->
+          <div id="quiz-questions-list" class="space-y-4">
+            <!-- Dynamic interactive cards with delete buttons -->
+          </div>
+
+          <!-- Quiz Completion Banner -->
+          <div id="quiz-results-card" class="hidden p-6 rounded-3xl bg-surface-900 border border-surface-700 text-center space-y-3 shadow-xl">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center mx-auto text-xl text-white shadow-lg">
+              <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h3 class="text-xl font-extrabold text-white">Quiz Completed!</h3>
+            <p id="quiz-final-score-text" class="text-sm text-slate-300">You scored 0 out of 0</p>
+            <div class="flex justify-center gap-2 pt-1">
+              <button id="finish-retake-btn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer">
+                Retake
+              </button>
+              <button id="finish-save-btn" class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-amber-300 border border-surface-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                Save to Library
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- PAGE 3: DEDICATED SAVED QUIZZES LIBRARY PAGE -->
+      <!-- ============================================================== -->
+      <section id="page-library" class="page-view hidden space-y-5">
+        
+        <!-- Library Header Card -->
+        <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-4 sm:p-6 shadow-xl backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-folder-bookmark text-cyan-400 text-lg"></i>
+              <h2 class="text-lg sm:text-xl font-extrabold text-white">Saved Quizzes Library</h2>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">Manage, organize by section, rename, and retake your exams anytime.</p>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="create-section-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5">
+              <i class="fa-solid fa-folder-plus text-amber-400"></i>
+              <span>+ New Folder</span>
+            </button>
+
+            <label class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5">
+              <i class="fa-solid fa-upload"></i>
+              <span>Import JSON</span>
+              <input type="file" id="import-quiz-file" accept=".json" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <!-- Section / Folder Filter Pills -->
+        <div id="library-section-pills" class="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 text-xs">
+          <!-- Dynamic section pills like [All (8)] [History (3)] [Coding (5)] -->
+        </div>
+
+        <!-- Saved Quizzes Grid Container -->
+        <div id="library-quizzes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Dynamic Quiz Cards -->
+        </div>
+
       </section>
 
     </main>
 
     <!-- Footer -->
-    <footer class="mt-auto pt-8 pb-4 border-t border-surface-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>YouTube Transcript Pro — Running locally on <strong class="text-slate-400">http://127.0.0.1:8000</strong></span>
+    <footer class="mt-auto pt-4 sm:pt-6 pb-2 border-t border-surface-800/80 flex items-center justify-between text-[11px] sm:text-xs text-slate-500">
+      <span>YT Transcript & AI Quiz Arena</span>
+      <div class="flex items-center gap-3">
+        <span id="pwa-status-badge" class="text-emerald-400 font-medium"><i class="fa-solid fa-circle-check text-[9px] mr-1"></i>PWA Ready</span>
+        <span>Localhost 127.0.0.1:8000</span>
       </div>
-      <p>100% Free & Open-Source Tool</p>
     </footer>
+
+    <!-- Mobile Bottom Navigation Bar (Appears on small screens) -->
+    <div class="fixed bottom-0 left-0 right-0 bg-surface-900/95 border-t border-surface-800 p-2 flex sm:hidden items-center justify-around z-40 backdrop-blur-xl">
+      <button class="mobile-nav-btn active flex flex-col items-center text-[10px] text-white font-bold" data-target="home">
+        <i class="fa-solid fa-file-lines text-base text-rose-400 mb-0.5"></i>
+        <span>Transcript</span>
+      </button>
+
+      <button class="mobile-nav-btn flex flex-col items-center text-[10px] text-slate-400" data-target="quiz">
+        <i class="fa-solid fa-graduation-cap text-base text-amber-400 mb-0.5"></i>
+        <span>Quiz Arena</span>
+      </button>
+
+      <button class="mobile-nav-btn flex flex-col items-center text-[10px] text-slate-400" data-target="library">
+        <i class="fa-solid fa-folder-bookmark text-base text-cyan-400 mb-0.5"></i>
+        <span>Library</span>
+      </button>
+    </div>
 
   </div>
 
   <!-- Toast Notification Popup -->
-  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-    <div class="bg-surface-800/95 backdrop-blur-xl border border-surface-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-semibold">
-      <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
-      <span id="toast-message">Copied to clipboard!</span>
+  <div id="toast" class="fixed bottom-16 sm:bottom-6 right-4 sm:right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-surface-800/95 backdrop-blur-xl border border-surface-600 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-semibold">
+      <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+      <span id="toast-message">Notification</span>
     </div>
   </div>
 
-  <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/static/app.js"></script>
 </body>
