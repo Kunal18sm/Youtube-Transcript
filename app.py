@@ -214,7 +214,18 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
     try:
         raw_snippets = target_transcript.fetch()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error downloading transcript snippets: {str(e)}")
+        err_msg = str(e)
+        if "blocking requests from your IP" in err_msg or "IpBlocked" in err_msg or "RequestBlocked" in err_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="YouTube blocked requests from this datacenter IP. Note: Free Webshare proxies are Datacenter IPs which YouTube detects. You can use a Residential Proxy or click 'Paste Transcript Directly' to create MCQs."
+            )
+        if "502" in err_msg or "Bad Gateway" in err_msg:
+            raise HTTPException(
+                status_code=502,
+                detail="YouTube's subtitle server responded with 502 Bad Gateway (common for live streams or newly uploaded videos). You can paste the transcript directly to proceed."
+            )
+        raise HTTPException(status_code=500, detail=f"Error downloading transcript: {err_msg[:140]}")
 
     snippets = []
     plain_text_parts = []

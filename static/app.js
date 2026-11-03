@@ -484,6 +484,7 @@ function switchPage(pageKey) {
 async function fetchTranscript(urlOrId, selectedLang = null) {
   setLoading(true);
   errorState.classList.add('hidden');
+  const startTime = Date.now();
 
   try {
     let apiUrl = `/api/transcript?url=${encodeURIComponent(urlOrId)}`;
@@ -491,6 +492,11 @@ async function fetchTranscript(urlOrId, selectedLang = null) {
 
     const res = await fetch(apiUrl);
     const data = await res.json();
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed < 500) {
+      await new Promise(r => setTimeout(r, 500 - elapsed));
+    }
 
     if (!res.ok) throw new Error(data.detail || 'Failed to fetch transcript.');
 
@@ -500,6 +506,10 @@ async function fetchTranscript(urlOrId, selectedLang = null) {
     displayVideoResults(data);
     showToast('Transcript loaded successfully!', 'success');
   } catch (err) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed < 500) {
+      await new Promise(r => setTimeout(r, 500 - elapsed));
+    }
     showError(err.message);
   } finally {
     setLoading(false);

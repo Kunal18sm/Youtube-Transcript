@@ -1,8 +1,8 @@
-const CACHE_NAME = 'yt-transcript-quiz-v1';
+const CACHE_NAME = 'yt-transcript-quiz-v2.3';
 const ASSETS_TO_CACHE = [
   '/',
-  '/static/styles.css',
-  '/static/app.js',
+  '/static/styles.css?v=2.3',
+  '/static/app.js?v=2.3',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
@@ -33,14 +33,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first for APIs, cache fallback for static assets
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(fetch(event.request));
+  // Always fetch network first for app.js and API calls
+  if (event.request.url.includes('/api/') || event.request.url.includes('app.js')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
   } else {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(event.request);
-      })
+      fetch(event.request).catch(() => caches.match(event.request))
     );
   }
 });

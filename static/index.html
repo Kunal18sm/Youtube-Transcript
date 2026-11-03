@@ -168,11 +168,49 @@
             <i class="fa-solid fa-triangle-exclamation text-red-400 text-base mt-0.5"></i>
             <div class="flex-1 text-xs">
               <h4 class="font-bold text-white" id="error-title">Could not load video</h4>
-              <p class="text-red-300 mt-0.5" id="error-message">Subtitles might be disabled on this video.</p>
-              <div class="flex items-center gap-2 mt-2">
+              <p class="text-red-300 mt-0.5 leading-relaxed" id="error-message">Subtitles might be disabled on this video.</p>
+              <div class="flex items-center gap-2 mt-3">
                 <button id="error-retry" class="text-xs bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg font-semibold cursor-pointer">Try Another</button>
+                <button id="error-paste-btn" class="text-xs bg-surface-800 hover:bg-surface-700 text-amber-300 border border-surface-600 px-3 py-1.5 rounded-lg font-semibold cursor-pointer flex items-center gap-1.5">
+                  <i class="fa-solid fa-clipboard-list text-amber-400"></i>
+                  <span>Paste Transcript Directly</span>
+                </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Manual Paste Box (Direct fallback when YouTube blocks cloud IPs) -->
+        <div id="manual-paste-box" class="hidden max-w-xl mx-auto bg-surface-900 border border-surface-700 rounded-3xl p-5 shadow-2xl space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-list text-amber-400"></i>
+              <span>Paste Video Transcript Text</span>
+            </h4>
+            <button id="cancel-manual-paste-btn" class="text-slate-400 hover:text-white text-xs cursor-pointer px-2 py-1">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            Open YouTube video &rarr; Click description &rarr; "Show transcript" &rarr; Copy & paste text here to generate pure concept MCQs:
+          </p>
+          <input 
+            type="text" 
+            id="manual-title-input" 
+            placeholder="Video Title or Subject (Optional)..." 
+            class="w-full bg-surface-950 border border-surface-700 text-white placeholder-slate-500 text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-rose-500 font-medium"
+          />
+          <textarea 
+            id="manual-transcript-input" 
+            rows="6" 
+            placeholder="Paste transcript lines here (with or without timestamps)..." 
+            class="w-full bg-surface-950 border border-surface-700 text-white placeholder-slate-500 text-xs p-3 rounded-xl focus:outline-none focus:border-rose-500 font-mono"
+          ></textarea>
+          <div class="flex items-center justify-end gap-2 pt-1">
+            <button id="submit-manual-paste-btn" class="w-full sm:w-auto px-6 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2">
+              <i class="fa-solid fa-bolt"></i>
+              <span>Load Transcript & Create MCQs</span>
+            </button>
           </div>
         </div>
 
@@ -578,6 +616,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.3"></script>
 </body>
 </html>
