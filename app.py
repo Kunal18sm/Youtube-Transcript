@@ -1,10 +1,11 @@
 import re
 import html
+import os
 from typing import Optional, List, Dict, Any
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
@@ -17,7 +18,6 @@ from youtube_transcript_api._errors import (
 
 app = FastAPI(title="YouTube Transcript Pro", version="1.0.0")
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,11 +29,9 @@ app.add_middleware(
 def extract_video_id(url_or_id: str) -> Optional[str]:
     """Extract 11-char YouTube video ID from various URL formats or raw ID."""
     clean = url_or_id.strip()
-    # Check if raw 11-char ID
     if re.match(r'^[a-zA-Z0-9_-]{11}$', clean):
         return clean
     
-    # Check common YouTube URL patterns
     patterns = [
         r'(?:v=|\/v\/|embed\/|shorts\/|live\/|youtu\.be\/|\/e\/)([a-zA-Z0-9_-]{11})',
         r'[\?&]v=([a-zA-Z0-9_-]{11})'
@@ -86,16 +84,12 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
         "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
     }
 
-@app.get("/api/info")
-@app.get("/info")
-def get_video_info(url: str = Query(..., description="YouTube URL or Video ID")):
-    """Get video metadata and list of available transcript languages."""
+def get_video_info_data(url: str) -> Dict[str, Any]:
     video_id = extract_video_id(url)
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
-    
     api = YouTubeTranscriptApi()
     languages = []
     try:
@@ -114,12 +108,12 @@ def get_video_info(url: str = Query(..., description="YouTube URL or Video ID"))
     except RequestBlocked:
         raise HTTPException(status_code=429, detail="YouTube is rate-limiting requests. Please try again in a few moments.")
     except Exception as e:
-        err = str(e)
-        if "no longer available" in err.lower():
-            raise HTTPException(status_code=404, detail="This video is no longer available or is private.")
-        if "subtitles are disabled" in err.lower():
+        err = str(e).lower()
+        if "no longer available" in err or "private" in err:
+            raise HTTPException(status_code=404, detail="This video is unavailable, private, or a live stream with no captions yet.")
+        if "subtitles are disabled" in err:
             raise HTTPException(status_code=404, detail="Subtitles/Captions are disabled for this video.")
-        raise HTTPException(status_code=500, detail=f"Could not retrieve transcripts: {err.splitlines()[0] if err.splitlines() else err}")
+        raise HTTPException(status_code=500, detail=f"Could not retrieve transcripts: {str(e)[:120]}")
 
     if not languages:
         raise HTTPException(status_code=404, detail="No transcripts found for this video.")
@@ -133,16 +127,10 @@ def get_video_info(url: str = Query(..., description="YouTube URL or Video ID"))
         "languages": languages
     }
 
-@app.get("/api/transcript")
-@app.get("/transcript")
-def get_transcript(
-    url: str = Query(..., description="YouTube URL or Video ID"),
-    lang: Optional[str] = Query(None, description="Preferred language code (e.g., 'en', 'hi')")
-):
-    """Fetch complete transcript with timestamps, word stats, and formatted outputs."""
+def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
     video_id = extract_video_id(url)
     if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID.")
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
     api = YouTubeTranscriptApi()
@@ -150,20 +138,19 @@ def get_transcript(
     try:
         transcript_list = api.list(video_id)
     except TranscriptsDisabled:
-        raise HTTPException(status_code=404, detail="Captions/Subtitles are disabled for this video.")
+        raise HTTPException(status_code=404, detail="Captions/Subtitles are disabled for this video by creator.")
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video.")
     except RequestBlocked:
         raise HTTPException(status_code=429, detail="YouTube temporarily throttled requests. Try again shortly.")
     except Exception as e:
-        err = str(e)
-        if "no longer available" in err.lower():
-            raise HTTPException(status_code=404, detail="This video is no longer available or is private.")
-        if "subtitles are disabled" in err.lower():
-            raise HTTPException(status_code=404, detail="Subtitles/Captions are disabled for this video.")
-        raise HTTPException(status_code=500, detail=f"Failed to query transcripts: {err.splitlines()[0] if err.splitlines() else err}")
+        err = str(e).lower()
+        if "no longer available" in err or "private" in err:
+            raise HTTPException(status_code=404, detail="This video is unavailable, private, or an ongoing live stream with no captions.")
+        if "subtitles are disabled" in err:
+            raise HTTPException(status_code=404, detail="Subtitles/Captions are turned off for this video.")
+        raise HTTPException(status_code=500, detail=f"Failed to query transcripts: {str(e)[:120]}")
 
-    # Language selection logic
     target_transcript = None
     all_langs = []
     for t in transcript_list:
@@ -178,9 +165,7 @@ def get_transcript(
         try:
             target_transcript = transcript_list.find_transcript([lang])
         except Exception:
-            # If specified lang not found directly, check if we can translate
             try:
-                # Find any transcript that is translatable
                 for t in transcript_list:
                     if t.is_translatable:
                         target_transcript = t.translate(lang)
@@ -189,20 +174,17 @@ def get_transcript(
                 pass
     
     if not target_transcript:
-        # Default priority: manually created en, then hi, then any manual, then auto
         try:
             target_transcript = transcript_list.find_manually_created_transcript(['en', 'hi'])
         except Exception:
             try:
                 target_transcript = transcript_list.find_generated_transcript(['en', 'hi'])
             except Exception:
-                # Fallback to the first available transcript
                 target_transcript = next(iter(transcript_list), None)
     
     if not target_transcript:
-        raise HTTPException(status_code=404, detail="No suitable transcript could be found.")
+        raise HTTPException(status_code=404, detail="No suitable transcript found for this video.")
 
-    # Fetch the transcript snippets
     try:
         raw_snippets = target_transcript.fetch()
     except Exception as e:
@@ -214,9 +196,7 @@ def get_transcript(
     max_time = 0.0
 
     for item in raw_snippets:
-        # Unescape any HTML entities like &#39; &amp; etc.
         clean_text = html.unescape(item.text).strip()
-        # Clean newlines inside a single segment
         clean_text = re.sub(r'\s+', ' ', clean_text)
         if not clean_text:
             continue
@@ -240,7 +220,6 @@ def get_transcript(
         })
         plain_text_parts.append(clean_text)
 
-    # Paragraph grouping (group snippets separated by less than ~2.5 seconds or until ~30-50 words)
     paragraphs = []
     current_para = []
     current_start = 0.0
@@ -252,7 +231,6 @@ def get_transcript(
         current_para.append(s["text"])
         current_words += len(s["text"].split())
 
-        # Check if we should flush paragraph
         if current_words >= 45 or s["text"].endswith(('.', '?', '!')):
             paragraphs.append({
                 "start": current_start,
@@ -269,7 +247,6 @@ def get_transcript(
             "text": " ".join(current_para)
         })
 
-    # Generate SRT format
     srt_lines = []
     for idx, s in enumerate(snippets, start=1):
         srt_lines.append(str(idx))
@@ -278,10 +255,7 @@ def get_transcript(
         srt_lines.append("")
     srt_content = "\n".join(srt_lines)
 
-    # Pure plain text (continuous)
     plain_text = " ".join(plain_text_parts)
-
-    # Plain text with timestamps
     timestamped_text = "\n".join([f"[{s['formatted_time']}] {s['text']}" for s in snippets])
 
     return {
@@ -306,8 +280,21 @@ def get_transcript(
         "srt_content": srt_content
     }
 
+# FastAPI Local Endpoints
+@app.get("/api/info")
+@app.get("/info")
+def get_video_info(url: str = Query(..., description="YouTube URL or Video ID")):
+    return get_video_info_data(url)
+
+@app.get("/api/transcript")
+@app.get("/transcript")
+def get_transcript(
+    url: str = Query(..., description="YouTube URL or Video ID"),
+    lang: Optional[str] = Query(None, description="Preferred language code (e.g., 'en', 'hi')")
+):
+    return get_transcript_data(url, lang)
+
 # Serve frontend static files
-import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(BASE_DIR, "public", "static")
 if not os.path.exists(static_dir):
