@@ -183,7 +183,16 @@ function setupEventListeners() {
   });
 
   if (jumpToQuizBtn) {
-    jumpToQuizBtn.addEventListener('click', () => switchPage('quiz'));
+    jumpToQuizBtn.addEventListener('click', () => {
+      if (currentQuizData) {
+        switchPage('quiz');
+      } else {
+        const configCard = document.getElementById('quiz-config-card');
+        if (configCard) {
+          configCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    });
   }
 
   // Input events
@@ -449,11 +458,12 @@ function switchPage(pageKey) {
     navQuizBtn.classList.add('active', 'text-white', 'bg-surface-800', 'shadow-md');
     navQuizBtn.classList.remove('text-slate-400');
 
+    const emptyCard = document.getElementById('quiz-empty-card');
     if (currentQuizData) {
-      quizConfigCard.classList.add('hidden');
+      if (emptyCard) emptyCard.classList.add('hidden');
       quizPlayerCard.classList.remove('hidden');
     } else {
-      quizConfigCard.classList.remove('hidden');
+      if (emptyCard) emptyCard.classList.remove('hidden');
       quizPlayerCard.classList.add('hidden');
     }
   } else if (pageKey === 'library') {
@@ -617,6 +627,7 @@ async function handleGenerateQuiz() {
     currentQuizData.title = customTitle || quizData.title || 'Video Quiz';
     currentQuizData.section = chosenSection;
     activeQuizBadge.classList.remove('hidden');
+    switchPage('quiz');
     resetCurrentQuiz();
     showToast(`Generated ${quizData.total_questions} pure concept MCQs!`, 'success');
   } catch (err) {
@@ -644,7 +655,8 @@ function resetCurrentQuiz() {
   updateQuizScoreUI();
   renderQuizPlayer();
 
-  quizConfigCard.classList.add('hidden');
+  const emptyCard = document.getElementById('quiz-empty-card');
+  if (emptyCard) emptyCard.classList.add('hidden');
   quizPlayerCard.classList.remove('hidden');
 }
 
