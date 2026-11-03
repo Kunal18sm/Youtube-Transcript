@@ -87,6 +87,7 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
     }
 
 @app.get("/api/info")
+@app.get("/info")
 def get_video_info(url: str = Query(..., description="YouTube URL or Video ID")):
     """Get video metadata and list of available transcript languages."""
     video_id = extract_video_id(url)
@@ -133,6 +134,7 @@ def get_video_info(url: str = Query(..., description="YouTube URL or Video ID"))
     }
 
 @app.get("/api/transcript")
+@app.get("/transcript")
 def get_transcript(
     url: str = Query(..., description="YouTube URL or Video ID"),
     lang: Optional[str] = Query(None, description="Preferred language code (e.g., 'en', 'hi')")
@@ -305,11 +307,25 @@ def get_transcript(
     }
 
 # Serve frontend static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_dir = os.path.join(BASE_DIR, "public", "static")
+if not os.path.exists(static_dir):
+    static_dir = os.path.join(BASE_DIR, "static")
+
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/")
 def serve_index():
-    return FileResponse("static/index.html")
+    candidates = [
+        os.path.join(BASE_DIR, "public", "index.html"),
+        os.path.join(BASE_DIR, "static", "index.html"),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return FileResponse(c)
+    return {"message": "YouTube Transcript Pro API is running"}
 
 if __name__ == "__main__":
     import uvicorn
