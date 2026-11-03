@@ -84,13 +84,33 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
         "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
     }
 
+def get_yt_api() -> YouTubeTranscriptApi:
+    """Create YouTubeTranscriptApi instance with realistic desktop headers and optional proxy support."""
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Dest": "document",
+    })
+    proxy_url = os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    if proxy_url:
+        session.proxies.update({
+            "http": proxy_url,
+            "https": proxy_url,
+        })
+    return YouTubeTranscriptApi(http_client=session)
+
 def get_video_info_data(url: str) -> Dict[str, Any]:
     video_id = extract_video_id(url)
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
-    api = YouTubeTranscriptApi()
+    api = get_yt_api()
     languages = []
     try:
         transcript_list = api.list(video_id)
@@ -106,7 +126,7 @@ def get_video_info_data(url: str) -> Dict[str, Any]:
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video on YouTube.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube is rate-limiting requests. Please try again in a few moments.")
+        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. You can use 'Paste Transcript Directly' or set PROXY_URL.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:
@@ -133,7 +153,7 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
     
     meta = fetch_oembed_metadata(video_id)
-    api = YouTubeTranscriptApi()
+    api = get_yt_api()
 
     try:
         transcript_list = api.list(video_id)
@@ -142,7 +162,7 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail="No transcript found for this video.")
     except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube temporarily throttled requests. Try again shortly.")
+        raise HTTPException(status_code=429, detail="YouTube blocked cloud datacenter IP. You can use 'Paste Transcript Directly' to paste text, or set PROXY_URL.")
     except Exception as e:
         err = str(e).lower()
         if "no longer available" in err or "private" in err:
@@ -399,6 +419,13 @@ def get_icon512():
     if not os.path.exists(p):
         p = os.path.join(BASE_DIR, "static", "icon-512.png")
     return FileResponse(p)
+
+@app.get("/favicon.ico")
+def get_favicon():
+    p = os.path.join(BASE_DIR, "public", "icon-192.png")
+    if not os.path.exists(p):
+        p = os.path.join(BASE_DIR, "static", "icon-192.png")
+    return FileResponse(p, media_type="image/png")
 
 @app.get("/")
 def serve_index():

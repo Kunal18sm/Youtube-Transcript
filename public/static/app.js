@@ -38,6 +38,14 @@ const loadingState = document.getElementById('loading-state');
 const errorState = document.getElementById('error-state');
 const errorMessage = document.getElementById('error-message');
 const errorRetry = document.getElementById('error-retry');
+const errorPasteBtn = document.getElementById('error-paste-btn');
+const tabYtLink = document.getElementById('tab-yt-link');
+const tabPasteText = document.getElementById('tab-paste-text');
+const manualPasteBox = document.getElementById('manual-paste-box');
+const manualTitleInput = document.getElementById('manual-title-input');
+const manualTranscriptInput = document.getElementById('manual-transcript-input');
+const cancelManualPasteBtn = document.getElementById('cancel-manual-paste-btn');
+const submitManualPasteBtn = document.getElementById('submit-manual-paste-btn');
 const resultSection = document.getElementById('result-section');
 
 // Video Meta DOM
@@ -208,6 +216,24 @@ function setupEventListeners() {
     urlInput.focus();
   });
 
+  // Mode Tabs (YouTube Link vs Direct Text Paste)
+  if (tabYtLink && tabPasteText) {
+    tabYtLink.addEventListener('click', () => switchToInputMode('link'));
+    tabPasteText.addEventListener('click', () => switchToInputMode('paste'));
+  }
+  if (cancelManualPasteBtn) {
+    cancelManualPasteBtn.addEventListener('click', () => switchToInputMode('link'));
+  }
+  if (errorPasteBtn) {
+    errorPasteBtn.addEventListener('click', () => {
+      errorState.classList.add('hidden');
+      switchToInputMode('paste');
+    });
+  }
+  if (submitManualPasteBtn) {
+    submitManualPasteBtn.addEventListener('click', handleManualPasteSubmit);
+  }
+
   languageSelect.addEventListener('change', () => {
     if (currentVideoId) fetchTranscript(currentVideoId, languageSelect.value);
   });
@@ -231,6 +257,11 @@ function setupEventListeners() {
   downloadTxt.addEventListener('click', () => downloadFile('txt'));
   downloadSrt.addEventListener('click', () => downloadFile('srt'));
   downloadJson.addEventListener('click', () => downloadFile('json'));
+
+  const dlHeaderBtn = document.getElementById('download-transcript-header-btn');
+  if (dlHeaderBtn) {
+    dlHeaderBtn.addEventListener('click', () => downloadFile('txt'));
+  }
 
   // Custom question count toggle
   quizCountSelect.addEventListener('change', () => {
@@ -286,6 +317,113 @@ function setupEventListeners() {
       if (e.target === editQuizModal) closeEditQuizModal();
     });
   }
+}
+
+function switchToInputMode(mode) {
+  if (mode === 'link') {
+    form?.classList.remove('hidden');
+    manualPasteBox?.classList.add('hidden');
+    tabYtLink?.classList.add('bg-surface-800', 'text-white', 'font-bold', 'border-surface-700', 'shadow-sm');
+    tabYtLink?.classList.remove('text-slate-400');
+    tabPasteText?.classList.remove('bg-surface-800', 'text-white', 'font-bold', 'border-surface-700', 'shadow-sm');
+    tabPasteText?.classList.add('text-slate-400');
+    urlInput?.focus();
+  } else {
+    form?.classList.add('hidden');
+    manualPasteBox?.classList.remove('hidden');
+    tabPasteText?.classList.add('bg-surface-800', 'text-white', 'font-bold', 'border-surface-700', 'shadow-sm');
+    tabPasteText?.classList.remove('text-slate-400');
+    tabYtLink?.classList.remove('bg-surface-800', 'text-white', 'font-bold', 'border-surface-700', 'shadow-sm');
+    tabYtLink?.classList.add('text-slate-400');
+    manualTranscriptInput?.focus();
+  }
+}
+
+function formatTimestamp(seconds) {
+  const s = Math.floor(seconds || 0);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  }
+  return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+}
+
+function handleManualPasteSubmit() {
+  const text = manualTranscriptInput?.value.trim();
+  if (!text) {
+    showToast('Please paste transcript or lecture dialogue text!', 'error');
+    manualTranscriptInput?.focus();
+    return;
+  }
+
+  const title = manualTitleInput?.value.trim() || 'Custom Lecture Notes';
+  const words = text.split(/\s+/).filter(Boolean);
+  const totalWords = words.length;
+
+  const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let parsedItems = [];
+  let currentTime = 0;
+
+  for (let line of rawLines) {
+    const tsMatch = line.match(/^\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*(.*)$/);
+    if (tsMatch) {
+      const timeStr = tsMatch[1];
+      const content = tsMatch[2].trim();
+      const parts = timeStr.split(':').map(Number);
+      let sec = 0;
+      if (parts.length === 3) sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      else if (parts.length === 2) sec = parts[0] * 60 + parts[1];
+      if (content) {
+        parsedItems.push({
+          start: sec,
+          duration: 3,
+          formatted_start: timeStr,
+          text: content
+        });
+      }
+    } else {
+      parsedItems.push({
+        start: currentTime,
+        duration: 3,
+        formatted_start: formatTimestamp(currentTime),
+        text: line
+      });
+      currentTime += 3;
+    }
+  }
+
+  if (parsedItems.length === 0) {
+    parsedItems = [{
+      start: 0,
+      duration: 5,
+      formatted_start: "00:00",
+      text: text
+    }];
+  }
+
+  const durationSec = parsedItems[parsedItems.length - 1].start + 5;
+
+  currentVideoId = '';
+  currentData = {
+    video_id: '',
+    title: title,
+    author: 'Direct Input',
+    author_url: '',
+    thumbnail: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=300&q=80',
+    total_words: totalWords,
+    duration_seconds: durationSec,
+    formatted_duration: formatTimestamp(durationSec),
+    transcript: parsedItems,
+    timestamped_text: parsedItems.map(p => `[${p.formatted_start}] ${p.text}`).join('\n'),
+    plain_text: parsedItems.map(p => p.text).join(' '),
+    srt_content: '',
+    available_languages: [{ language: 'English', language_code: 'en' }]
+  };
+
+  renderCurrentView();
+  showToast('Transcript loaded! Ready for Quiz Arena.', 'success');
 }
 
 // ----------------------------------------------------
@@ -395,6 +533,12 @@ function displayVideoResults(data) {
 
   if (!playerContainer.classList.contains('hidden')) {
     initOrUpdatePlayer(data.video_id);
+  }
+
+  const heroContainer = document.getElementById('home-hero-container');
+  if (heroContainer) {
+    heroContainer.classList.remove('my-auto', 'py-6', 'sm:py-16');
+    heroContainer.classList.add('py-2', 'sm:py-4');
   }
 
   renderTranscript();
@@ -901,27 +1045,74 @@ function renderLibrarySections() {
   sections.forEach(sec => {
     const count = sec === 'All' ? allQuizzes.length : allQuizzes.filter(q => (q.section || 'General') === sec).length;
     const isActive = activeSectionFilter === sec;
+    const canDelete = sec !== 'All' && sec !== 'General';
 
-    const pill = document.createElement('button');
+    const pill = document.createElement('div');
     pill.className = `px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 text-xs ${
       isActive
-        ? 'bg-cyan-500 text-slate-950 shadow-md'
-        : 'bg-surface-900 hover:bg-surface-800 text-slate-400 hover:text-white border border-surface-800'
+        ? 'bg-rose-600 text-white shadow-md'
+        : 'bg-surface-850 hover:bg-surface-800 text-slate-300 hover:text-white border border-surface-700/80'
     }`;
 
     pill.innerHTML = `
       <span>${escapeHtml(sec)}</span>
       <span class="text-[10px] opacity-75 font-mono">(${count})</span>
+      ${canDelete ? `
+        <span class="delete-sec-btn ml-1 hover:text-red-400 p-0.5 rounded cursor-pointer" title="Delete folder ${escapeHtml(sec)}">
+          <i class="fa-solid fa-xmark text-[10px]"></i>
+        </span>
+      ` : ''}
     `;
 
-    pill.addEventListener('click', () => {
+    pill.addEventListener('click', (e) => {
+      if (e.target.closest('.delete-sec-btn')) return;
       activeSectionFilter = sec;
       renderLibrarySections();
       renderLibraryQuizzesGrid();
     });
 
+    if (canDelete) {
+      const delBtn = pill.querySelector('.delete-sec-btn');
+      if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          handleDeleteSection(sec);
+        });
+      }
+    }
+
     librarySectionPills.appendChild(pill);
   });
+}
+
+function handleDeleteSection(sectionName) {
+  if (!confirm(`Delete folder "${sectionName}"? Any saved quizzes in it will be moved to "General".`)) {
+    return;
+  }
+
+  const quizzes = getSavedQuizzes();
+  let updatedAny = false;
+  quizzes.forEach(q => {
+    if (q.section === sectionName) {
+      q.section = 'General';
+      updatedAny = true;
+    }
+  });
+  if (updatedAny) {
+    localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+  }
+
+  const sections = getStoredSections().filter(s => s !== sectionName);
+  saveStoredSections(sections);
+
+  if (activeSectionFilter === sectionName) {
+    activeSectionFilter = 'All';
+  }
+
+  populateSectionDropdown();
+  renderLibrarySections();
+  renderLibraryQuizzesGrid();
+  showToast(`Deleted folder "${sectionName}".`, 'success');
 }
 
 function renderLibraryQuizzesGrid() {
@@ -936,11 +1127,11 @@ function renderLibraryQuizzesGrid() {
 
   if (quizzes.length === 0) {
     libraryQuizzesGrid.innerHTML = `
-      <div class="col-span-full text-center py-12 bg-surface-900/60 border border-surface-800 rounded-3xl p-6">
-        <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto mb-2 text-xl">
+      <div class="col-span-full text-center py-12 bg-surface-900 border border-surface-800 rounded-3xl p-6">
+        <div class="w-12 h-12 rounded-2xl bg-surface-800 text-rose-400 flex items-center justify-center mx-auto mb-2 text-xl">
           <i class="fa-solid fa-folder-open"></i>
         </div>
-        <h4 class="font-bold text-white text-sm">No quizzes in "${activeSectionFilter}" folder</h4>
+        <h4 class="font-bold text-white text-sm">No quizzes in "${escapeHtml(activeSectionFilter)}" folder</h4>
         <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
           Extract a video, generate MCQs, and save them to this section.
         </p>
@@ -951,7 +1142,7 @@ function renderLibraryQuizzesGrid() {
 
   quizzes.forEach((quiz) => {
     const card = document.createElement('div');
-    card.className = 'p-5 rounded-3xl bg-surface-900/90 border border-surface-700/80 hover:border-surface-600 transition-all shadow-xl flex flex-col justify-between gap-4 backdrop-blur-xl';
+    card.className = 'p-5 rounded-3xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-xl flex flex-col justify-between gap-4';
 
     const sectionName = quiz.section || 'General';
 
@@ -959,14 +1150,14 @@ function renderLibraryQuizzesGrid() {
       <div>
         <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
           <div class="flex items-center gap-1.5">
-            <span class="text-cyan-400 font-bold bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full text-[10px]">
+            <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2 py-0.5 rounded-full text-[10px]">
               ${quiz.total_questions} Concept MCQs
             </span>
-            <span class="text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px]">
+            <span class="text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full text-[10px]">
               <i class="fa-solid fa-folder text-[9px] mr-1"></i>${escapeHtml(sectionName)}
             </span>
           </div>
-          <span class="text-[11px]">${quiz.savedAt}</span>
+          <span class="text-[11px] text-slate-500">${quiz.savedAt}</span>
         </div>
 
         <div class="flex items-start justify-between gap-2">
@@ -974,29 +1165,29 @@ function renderLibraryQuizzesGrid() {
             ${escapeHtml(quiz.title)}
           </h4>
           <!-- Title Edit / Customization Button -->
-          <button class="edit-quiz-btn p-1.5 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" data-id="${quiz.id}" title="Rename quiz title or change folder">
+          <button class="edit-quiz-btn p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" data-id="${quiz.id}" title="Rename quiz title or change folder">
             <i class="fa-solid fa-pen-to-square text-xs"></i>
           </button>
         </div>
 
         ${quiz.score ? `
-          <div class="mt-2.5 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-xl font-bold text-[11px]">
+          <div class="mt-2.5 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-xl font-bold text-[11px]">
             <i class="fa-solid fa-trophy text-[9px]"></i> Last Score: ${quiz.score}
           </div>
         ` : ''}
       </div>
 
       <div class="flex items-center justify-between pt-3 border-t border-surface-800 gap-2">
-        <button class="flex-1 py-2 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
+        <button class="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
           <i class="fa-solid fa-play text-[9px]"></i> Start Practice Arena
         </button>
 
         <button class="p-2 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs cursor-pointer download-saved-btn" data-id="${quiz.id}" title="Download JSON">
-          <i class="fa-solid fa-download"></i>
+          <i class="fa-solid fa-download text-xs text-rose-400"></i>
         </button>
 
-        <button class="p-2 bg-surface-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-surface-700 rounded-xl text-xs cursor-pointer delete-saved-btn" data-id="${quiz.id}" title="Delete">
-          <i class="fa-solid fa-trash-can"></i>
+        <button class="p-2 bg-surface-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-surface-700 rounded-xl text-xs cursor-pointer delete-saved-btn" data-id="${quiz.id}" title="Delete">
+          <i class="fa-solid fa-trash-can text-xs"></i>
         </button>
       </div>
     `;
