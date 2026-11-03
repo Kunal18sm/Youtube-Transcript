@@ -1,8 +1,11 @@
 import re
 import html
 import os
+import tempfile
+import glob
 from typing import Optional, List, Dict, Any
 import requests
+import yt_dlp
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -64,7 +67,16 @@ def seconds_to_srt_time(seconds: float) -> str:
 
 def get_proxy_url() -> Optional[str]:
     p = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or os.getenv("HTTP_PROXY", "").strip()
-    return p if p else None
+    if not p:
+        return None
+    if not p.startswith("http://") and not p.startswith("https://") and not p.startswith("socks5://"):
+        user = os.getenv("PROXY_USER", "").strip()
+        pwd = os.getenv("PROXY_PASS", "").strip()
+        if user and pwd:
+            p = f"http://{user}:{pwd}@{p}"
+        else:
+            p = f"http://{p}"
+    return p
 
 def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
     """Fetch video title, author, thumbnail using public oEmbed."""
@@ -91,9 +103,21 @@ def fetch_oembed_metadata(video_id: str) -> Dict[str, Any]:
         "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
     }
 
+class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
+    def __init__(self, timeout: float = 4.0, *args, **kwargs):
+        self.timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        kwargs.setdefault("timeout", self.timeout)
+        return super().send(request, **kwargs)
+
 def get_yt_api(use_proxy: bool = True) -> YouTubeTranscriptApi:
     """Create YouTubeTranscriptApi instance with realistic desktop headers, optional cookies, and proxy support."""
     session = requests.Session()
+    adapter = TimeoutHTTPAdapter(timeout=4.0)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
@@ -104,7 +128,6 @@ def get_yt_api(use_proxy: bool = True) -> YouTubeTranscriptApi:
         "Sec-Fetch-Dest": "document",
     })
 
-    # Optional YouTube Cookies to bypass datacenter IP restrictions for free
     cookies_raw = os.getenv("YOUTUBE_COOKIES", "").strip()
     if cookies_raw:
         for line in cookies_raw.splitlines():
@@ -141,154 +164,102 @@ def fetch_transcript_list_safely(video_id: str):
             return direct_api.list(video_id)
         raise
 
-def get_video_info_data(url: str) -> Dict[str, Any]:
-    video_id = extract_video_id(url)
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
-    
-    meta = fetch_oembed_metadata(video_id)
-    languages = []
-    try:
-        transcript_list = fetch_transcript_list_safely(video_id)
-        for t in transcript_list:
-            languages.append({
-                "language": t.language,
-                "language_code": t.language_code,
-                "is_generated": t.is_generated,
-                "is_translatable": t.is_translatable,
-            })
-    except VideoUnavailable:
-        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended.")
-    except TranscriptsDisabled:
-        raise HTTPException(status_code=404, detail="Subtitles/Captions are disabled by the creator for this video.")
-    except NoTranscriptFound:
-        raise HTTPException(status_code=404, detail="No transcript found for this video on YouTube.")
-    except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube temporarily throttled cloud requests. You can click 'Paste Transcript Directly' below to continue.")
-    except Exception as e:
-        err = str(e).lower()
-        if "no longer available" in err or "private" in err:
-            raise HTTPException(status_code=404, detail="This video is unavailable, private, or a live stream with no captions yet.")
-        if "subtitles are disabled" in err:
-            raise HTTPException(status_code=404, detail="Subtitles/Captions are disabled for this video.")
-        raise HTTPException(status_code=500, detail=f"Could not retrieve transcripts: {str(e)[:120]}")
+def parse_vtt_content(content: str) -> List[Dict[str, Any]]:
+    """Parse WebVTT content into clean, timestamped transcript snippets."""
+    def ts_to_sec(ts: str) -> float:
+        parts = ts.strip().split(":")
+        if len(parts) == 3:
+            h, m, s = parts
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        elif len(parts) == 2:
+            m, s = parts
+            return int(m) * 60 + float(s)
+        return float(ts)
 
-    if not languages:
-        raise HTTPException(status_code=404, detail="No transcripts found for this video.")
-
-    return {
-        "video_id": video_id,
-        "title": meta["title"],
-        "author": meta["author"],
-        "author_url": meta["author_url"],
-        "thumbnail": meta["thumbnail"],
-        "languages": languages
-    }
-
-def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
-    video_id = extract_video_id(url)
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
-    
-    meta = fetch_oembed_metadata(video_id)
-
-    try:
-        transcript_list = fetch_transcript_list_safely(video_id)
-    except VideoUnavailable:
-        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended on YouTube.")
-    except TranscriptsDisabled:
-        raise HTTPException(status_code=404, detail="Captions/Subtitles are disabled for this video by creator.")
-    except NoTranscriptFound:
-        raise HTTPException(status_code=404, detail="No transcript found for this video.")
-    except RequestBlocked:
-        raise HTTPException(status_code=429, detail="YouTube temporarily throttled cloud requests. You can click 'Paste Transcript Directly' below to continue.")
-    except Exception as e:
-        err = str(e).lower()
-        if "no longer available" in err or "private" in err:
-            raise HTTPException(status_code=404, detail="This video is unavailable, private, or an ongoing live stream with no captions.")
-        if "subtitles are disabled" in err:
-            raise HTTPException(status_code=404, detail="Subtitles/Captions are turned off for this video.")
-        raise HTTPException(status_code=500, detail=f"Failed to query transcripts: {str(e)[:120]}")
-
-    target_transcript = None
-    all_langs = []
-    for t in transcript_list:
-        all_langs.append({
-            "language": t.language,
-            "language_code": t.language_code,
-            "is_generated": t.is_generated,
-            "is_translatable": t.is_translatable,
-        })
-    
-    if lang:
-        try:
-            target_transcript = transcript_list.find_transcript([lang])
-        except Exception:
-            try:
-                for t in transcript_list:
-                    if t.is_translatable:
-                        target_transcript = t.translate(lang)
-                        break
-            except Exception:
-                pass
-    
-    if not target_transcript:
-        try:
-            target_transcript = transcript_list.find_manually_created_transcript(['en', 'hi'])
-        except Exception:
-            try:
-                target_transcript = transcript_list.find_generated_transcript(['en', 'hi'])
-            except Exception:
-                target_transcript = next(iter(transcript_list), None)
-    
-    if not target_transcript:
-        raise HTTPException(status_code=404, detail="No suitable transcript found for this video.")
-
-    try:
-        raw_snippets = target_transcript.fetch()
-    except Exception as e:
-        err_msg = str(e)
-        if "blocking requests from your IP" in err_msg or "IpBlocked" in err_msg or "RequestBlocked" in err_msg:
-            raise HTTPException(
-                status_code=429,
-                detail="YouTube blocked requests from this datacenter IP. Note: Free Webshare proxies are Datacenter IPs which YouTube detects. You can use a Residential Proxy or click 'Paste Transcript Directly' to create MCQs."
-            )
-        if "502" in err_msg or "Bad Gateway" in err_msg:
-            raise HTTPException(
-                status_code=502,
-                detail="YouTube's subtitle server responded with 502 Bad Gateway (common for live streams or newly uploaded videos). You can paste the transcript directly to proceed."
-            )
-        raise HTTPException(status_code=500, detail=f"Error downloading transcript: {err_msg[:140]}")
-
+    blocks = re.split(r"\n\s*\n", content)
     snippets = []
+    last_text = ""
+    
+    for block in blocks:
+        lines = [l.strip() for l in block.strip().splitlines() if l.strip()]
+        if not lines or lines[0].startswith("WEBVTT") or lines[0].startswith("Kind:") or lines[0].startswith("Language:"):
+            continue
+        
+        time_match = None
+        time_idx = -1
+        for i, line in enumerate(lines):
+            m = re.search(r"(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)", line)
+            if m:
+                time_match = m
+                time_idx = i
+                break
+        
+        if not time_match:
+            continue
+            
+        start_sec = ts_to_sec(time_match.group(1))
+        end_sec = ts_to_sec(time_match.group(2))
+        duration = max(0.1, round(end_sec - start_sec, 2))
+        
+        text_lines = lines[time_idx + 1:]
+        clean_lines = []
+        for tl in text_lines:
+            t = re.sub(r"<[^>]+>", "", tl)
+            t = html.unescape(t).strip()
+            if t and t not in clean_lines:
+                clean_lines.append(t)
+        
+        if not clean_lines:
+            continue
+            
+        text = " ".join(clean_lines).strip()
+        text = re.sub(r"\s+", " ", text)
+        
+        if not text or text == last_text:
+            continue
+            
+        if last_text and text.startswith(last_text) and len(text) > len(last_text):
+            new_part = text[len(last_text):].strip()
+            if new_part:
+                snippets.append({
+                    "start": round(start_sec, 2),
+                    "duration": round(duration, 2),
+                    "end": round(end_sec, 2),
+                    "formatted_time": format_timestamp(start_sec),
+                    "text": new_part
+                })
+                last_text = text
+                continue
+                
+        snippets.append({
+            "start": round(start_sec, 2),
+            "duration": round(duration, 2),
+            "end": round(end_sec, 2),
+            "formatted_time": format_timestamp(start_sec),
+            "text": text
+        })
+        last_text = text
+        
+    return snippets
+
+def build_transcript_payload(
+    video_id: str,
+    meta: Dict[str, Any],
+    lang_name: str,
+    lang_code: str,
+    is_generated: bool,
+    available_langs: List[Dict[str, Any]],
+    snippets: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     plain_text_parts = []
     total_words = 0
     max_time = 0.0
 
-    for item in raw_snippets:
-        clean_text = html.unescape(item.text).strip()
-        clean_text = re.sub(r'\s+', ' ', clean_text)
-        if not clean_text:
-            continue
-        
-        start = float(item.start)
-        duration = float(item.duration)
-        end = start + duration
-        if end > max_time:
-            max_time = end
-        
-        formatted_time = format_timestamp(start)
-        words = len(clean_text.split())
-        total_words += words
-        
-        snippets.append({
-            "start": round(start, 2),
-            "duration": round(duration, 2),
-            "end": round(end, 2),
-            "formatted_time": formatted_time,
-            "text": clean_text
-        })
-        plain_text_parts.append(clean_text)
+    for s in snippets:
+        plain_text_parts.append(s["text"])
+        total_words += len(s["text"].split())
+        if s.get("end", 0.0) > max_time:
+            max_time = s["end"]
 
     paragraphs = []
     current_para = []
@@ -300,8 +271,7 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
             current_start = s["start"]
         current_para.append(s["text"])
         current_words += len(s["text"].split())
-
-        if current_words >= 45 or s["text"].endswith(('.', '?', '!')):
+        if current_words >= 45 or s["text"].endswith(('.', '?', '!', '।')):
             paragraphs.append({
                 "start": current_start,
                 "formatted_time": format_timestamp(current_start),
@@ -330,14 +300,14 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
 
     return {
         "video_id": video_id,
-        "title": meta["title"],
-        "author": meta["author"],
-        "author_url": meta["author_url"],
-        "thumbnail": meta["thumbnail"],
-        "language": target_transcript.language,
-        "language_code": target_transcript.language_code,
-        "is_generated": target_transcript.is_generated,
-        "available_languages": all_langs,
+        "title": meta.get("title", f"Video ({video_id})"),
+        "author": meta.get("author", "YouTube Channel"),
+        "author_url": meta.get("author_url", ""),
+        "thumbnail": meta.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
+        "language": lang_name,
+        "language_code": lang_code,
+        "is_generated": is_generated,
+        "available_languages": available_langs,
         "total_snippets": len(snippets),
         "total_words": total_words,
         "duration_seconds": round(max_time, 2),
@@ -349,6 +319,266 @@ def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
         "timestamped_text": timestamped_text,
         "srt_content": srt_content
     }
+
+def fetch_transcript_data_ytdlp(video_id: str, lang: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Fallback Engine using yt-dlp to bypass YouTube cloud datacenter blocks and 502 Bad Gateway."""
+    if not meta:
+        meta = fetch_oembed_metadata(video_id)
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_tmpl = os.path.join(tmpdir, "%(id)s.%(ext)s")
+        langs_to_try = []
+        if lang:
+            langs_to_try.extend([f"{lang}-orig", lang])
+        langs_to_try.extend(["hi-orig", "hi", "en-orig", "en"])
+
+        ydl_opts = {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": langs_to_try,
+            "subtitlesformat": "vtt",
+            "outtmpl": out_tmpl,
+            "quiet": True,
+            "no_warnings": True,
+            "ignoreerrors": True,
+            "socket_timeout": 6,
+        }
+
+        proxy_url = get_proxy_url()
+        if proxy_url:
+            ydl_opts["proxy"] = proxy_url
+
+        cookies_raw = os.getenv("YOUTUBE_COOKIES", "").strip()
+        if cookies_raw:
+            try:
+                cp = os.path.join(tmpdir, "yt_cookies.txt")
+                with open(cp, "w", encoding="utf-8") as f:
+                    f.write(cookies_raw)
+                ydl_opts["cookiefile"] = cp
+            except Exception:
+                pass
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as e:
+            err = str(e).lower()
+            if "unavailable" in err or "private" in err:
+                raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
+            raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(e)[:140]}")
+
+        vtt_files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+        if not vtt_files:
+            raise HTTPException(status_code=404, detail="No transcript or captions found for this video on YouTube.")
+
+        chosen_vtt = vtt_files[0]
+        if lang:
+            for vf in vtt_files:
+                if f".{lang}." in vf or f".{lang}-" in vf:
+                    chosen_vtt = vf
+                    break
+        else:
+            for vf in vtt_files:
+                if ".hi" in vf:
+                    chosen_vtt = vf
+                    break
+                elif ".en" in vf:
+                    chosen_vtt = vf
+
+        with open(chosen_vtt, "r", encoding="utf-8") as f:
+            vtt_content = f.read()
+
+        snippets = parse_vtt_content(vtt_content)
+        if not snippets:
+            raise HTTPException(status_code=404, detail="Subtitles found but could not parse text cues.")
+
+        detected_lang = "Hindi" if ".hi" in chosen_vtt else ("English" if ".en" in chosen_vtt else "Auto")
+        detected_code = "hi" if ".hi" in chosen_vtt else ("en" if ".en" in chosen_vtt else "auto")
+
+        video_meta = {
+            "title": (info.get("title") if info else None) or meta.get("title", f"Video ({video_id})"),
+            "author": (info.get("uploader") if info else None) or meta.get("author", "YouTube Channel"),
+            "author_url": (info.get("uploader_url") if info else None) or meta.get("author_url", ""),
+            "thumbnail": (info.get("thumbnail") if info else None) or meta.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
+        }
+
+        all_langs = []
+        if info:
+            for code in (info.get("subtitles") or {}).keys():
+                all_langs.append({"language": code, "language_code": code, "is_generated": False, "is_translatable": True})
+            for code in (info.get("automatic_captions") or {}).keys():
+                all_langs.append({"language": code, "language_code": code, "is_generated": True, "is_translatable": True})
+
+        if not all_langs:
+            all_langs.append({"language": detected_lang, "language_code": detected_code, "is_generated": True, "is_translatable": False})
+
+        return build_transcript_payload(
+            video_id=video_id,
+            meta=video_meta,
+            lang_name=detected_lang,
+            lang_code=detected_code,
+            is_generated=True,
+            available_langs=all_langs,
+            snippets=snippets
+        )
+
+def fetch_video_info_ytdlp(video_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    """Fallback info extractor using yt-dlp."""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    ydl_opts = {
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "ignoreerrors": True,
+        "socket_timeout": 6,
+    }
+    proxy_url = get_proxy_url()
+    if proxy_url:
+        ydl_opts["proxy"] = proxy_url
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        info = None
+
+    languages = []
+    if info:
+        for code in (info.get("subtitles") or {}).keys():
+            languages.append({"language": code, "language_code": code, "is_generated": False, "is_translatable": True})
+        for code in (info.get("automatic_captions") or {}).keys():
+            languages.append({"language": code, "language_code": code, "is_generated": True, "is_translatable": True})
+
+    if not languages:
+        languages.append({"language": "Auto Captions", "language_code": "auto", "is_generated": True, "is_translatable": True})
+
+    return {
+        "video_id": video_id,
+        "title": (info.get("title") if info else None) or meta.get("title", f"Video ({video_id})"),
+        "author": (info.get("uploader") if info else None) or meta.get("author", "YouTube Channel"),
+        "author_url": (info.get("uploader_url") if info else None) or meta.get("author_url", ""),
+        "thumbnail": (info.get("thumbnail") if info else None) or meta.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
+        "languages": languages
+    }
+
+def get_video_info_data(url: str) -> Dict[str, Any]:
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
+    
+    meta = fetch_oembed_metadata(video_id)
+    languages = []
+    try:
+        transcript_list = fetch_transcript_list_safely(video_id)
+        for t in transcript_list:
+            languages.append({
+                "language": t.language,
+                "language_code": t.language_code,
+                "is_generated": t.is_generated,
+                "is_translatable": t.is_translatable,
+            })
+        return {
+            "video_id": video_id,
+            "title": meta["title"],
+            "author": meta["author"],
+            "author_url": meta["author_url"],
+            "thumbnail": meta["thumbnail"],
+            "languages": languages
+        }
+    except Exception:
+        # Fallback to yt-dlp metadata
+        return fetch_video_info_ytdlp(video_id, meta)
+
+def get_transcript_data(url: str, lang: Optional[str] = None) -> Dict[str, Any]:
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL or Video ID. Please check the link.")
+    
+    meta = fetch_oembed_metadata(video_id)
+
+    # Engine 1: Standard YouTubeTranscriptApi
+    try:
+        transcript_list = fetch_transcript_list_safely(video_id)
+        all_langs = []
+        for t in transcript_list:
+            all_langs.append({
+                "language": t.language,
+                "language_code": t.language_code,
+                "is_generated": t.is_generated,
+                "is_translatable": t.is_translatable,
+            })
+
+        target_transcript = None
+        if lang:
+            try:
+                target_transcript = transcript_list.find_transcript([lang])
+            except Exception:
+                try:
+                    for t in transcript_list:
+                        if t.is_translatable:
+                            target_transcript = t.translate(lang)
+                            break
+                except Exception:
+                    pass
+        
+        if not target_transcript:
+            try:
+                target_transcript = transcript_list.find_manually_created_transcript(['en', 'hi'])
+            except Exception:
+                try:
+                    target_transcript = transcript_list.find_generated_transcript(['en', 'hi'])
+                except Exception:
+                    target_transcript = next(iter(transcript_list), None)
+
+        if not target_transcript:
+            raise Exception("No suitable transcript found via API")
+
+        raw_snippets = target_transcript.fetch()
+        clean_snippets = []
+        for item in raw_snippets:
+            ct = html.unescape(item.text).strip()
+            ct = re.sub(r'\s+', ' ', ct)
+            if not ct:
+                continue
+            start = float(item.start)
+            duration = float(item.duration)
+            end = start + duration
+            clean_snippets.append({
+                "start": round(start, 2),
+                "duration": round(duration, 2),
+                "end": round(end, 2),
+                "formatted_time": format_timestamp(start),
+                "text": ct
+            })
+
+        if clean_snippets:
+            return build_transcript_payload(
+                video_id=video_id,
+                meta=meta,
+                lang_name=target_transcript.language,
+                lang_code=target_transcript.language_code,
+                is_generated=target_transcript.is_generated,
+                available_langs=all_langs,
+                snippets=clean_snippets
+            )
+    except Exception:
+        # Engine 1 failed (RequestBlocked, 502, Cloud IP Block, etc.)
+        # Fallback seamlessly to Engine 2 (yt-dlp VTT engine)
+        pass
+
+    # Engine 2: yt-dlp VTT Engine (bypasses datacenter blocks & 502 Bad Gateway)
+    try:
+        return fetch_transcript_data_ytdlp(video_id, lang, meta)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not extract transcript for video {video_id}: {str(e)[:120]}"
+        )
 
 from pydantic import BaseModel
 from quiz_generator import generate_mcq_quiz

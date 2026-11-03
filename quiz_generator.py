@@ -30,9 +30,9 @@ def call_gemini(prompt: str, api_key: str) -> List[Dict[str, Any]]:
     """Call Gemini API with structured JSON output and fallback models."""
     models_to_try = [
         "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
         "gemini-flash-latest",
-        "gemini-3.5-flash",
-        "gemini-2.5-pro"
+        "gemini-pro-latest"
     ]
 
     last_error = None
