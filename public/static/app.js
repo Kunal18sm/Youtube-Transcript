@@ -75,7 +75,16 @@ const generateQuizBtn = document.getElementById('generate-quiz-btn');
 const quizLoadingSpinner = document.getElementById('quiz-loading-spinner');
 const quizLoadingMsg = document.getElementById('quiz-loading-msg');
 const activeQuizTitle = document.getElementById('active-quiz-title');
+const editActiveQuizTitleBtn = document.getElementById('edit-active-quiz-title-btn');
 const activeQuizSectionBadge = document.getElementById('active-quiz-section-badge');
+const customQuizTitleInput = document.getElementById('custom-quiz-title-input');
+const editQuizModal = document.getElementById('edit-quiz-modal');
+const closeEditModalBtn = document.getElementById('close-edit-modal-btn');
+const cancelEditModalBtn = document.getElementById('cancel-edit-modal-btn');
+const saveEditModalBtn = document.getElementById('save-edit-modal-btn');
+const modalQuizTitleInput = document.getElementById('modal-quiz-title-input');
+const modalQuizSectionSelect = document.getElementById('modal-quiz-section-select');
+const modalAddSectionBtn = document.getElementById('modal-add-section-btn');
 const quizQProgress = document.getElementById('quiz-q-progress');
 const quizScoreCorrect = document.getElementById('quiz-score-correct');
 const quizScoreWrong = document.getElementById('quiz-score-wrong');
@@ -246,6 +255,37 @@ function setupEventListeners() {
   // Library Page: Add New Folder & File Import
   createSectionBtn.addEventListener('click', handleCreateNewSection);
   importQuizFile.addEventListener('change', handleImportQuizFile);
+
+  // Quiz Title Rename & Customization Modal Listeners
+  if (editActiveQuizTitleBtn) {
+    editActiveQuizTitleBtn.addEventListener('click', () => openEditQuizModal({ type: 'active' }));
+  }
+  if (activeQuizTitle) {
+    activeQuizTitle.addEventListener('click', () => openEditQuizModal({ type: 'active' }));
+  }
+  if (closeEditModalBtn) {
+    closeEditModalBtn.addEventListener('click', closeEditQuizModal);
+  }
+  if (cancelEditModalBtn) {
+    cancelEditModalBtn.addEventListener('click', closeEditQuizModal);
+  }
+  if (saveEditModalBtn) {
+    saveEditModalBtn.addEventListener('click', saveQuizCustomizationFromModal);
+  }
+  if (modalAddSectionBtn) {
+    modalAddSectionBtn.addEventListener('click', handleAddSectionFromModal);
+  }
+  if (modalQuizTitleInput) {
+    modalQuizTitleInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveQuizCustomizationFromModal();
+      if (e.key === 'Escape') closeEditQuizModal();
+    });
+  }
+  if (editQuizModal) {
+    editQuizModal.addEventListener('click', (e) => {
+      if (e.target === editQuizModal) closeEditQuizModal();
+    });
+  }
 }
 
 // ----------------------------------------------------
@@ -412,13 +452,15 @@ async function handleGenerateQuiz() {
   quizLoadingMsg.textContent = `Analyzing lecture content to generate ${numQuestions} pure concept MCQs in English...`;
 
   try {
+    const customTitle = customQuizTitleInput && customQuizTitleInput.value.trim() ? customQuizTitleInput.value.trim() : (currentData?.title || 'Video Quiz');
+
     const res = await fetch('/api/generate-quiz', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         video_id: currentVideoId,
         transcript_text: currentData.timestamped_text,
-        title: currentData.title,
+        title: customTitle,
         num_questions: numQuestions,
         difficulty: 'all'
       })
@@ -428,6 +470,7 @@ async function handleGenerateQuiz() {
     if (!res.ok) throw new Error(quizData.detail || 'Quiz generation failed.');
 
     currentQuizData = quizData;
+    currentQuizData.title = customTitle || quizData.title || 'Video Quiz';
     currentQuizData.section = chosenSection;
     activeQuizBadge.classList.remove('hidden');
     resetCurrentQuiz();
@@ -967,7 +1010,7 @@ function renderLibraryQuizzesGrid() {
   });
 
   document.querySelectorAll('.edit-quiz-btn').forEach(btn => {
-    btn.addEventListener('click', () => handleEditQuiz(btn.dataset.id));
+    btn.addEventListener('click', () => openEditQuizModal({ type: 'library', quizId: btn.dataset.id }));
   });
 
   document.querySelectorAll('.download-saved-btn').forEach(btn => {
@@ -982,33 +1025,144 @@ function renderLibraryQuizzesGrid() {
   });
 }
 
-function handleEditQuiz(quizId) {
-  const quizzes = getSavedQuizzes();
-  const quiz = quizzes.find(q => q.id === quizId);
-  if (!quiz) return;
+let currentEditModalContext = null; // { type: 'active' } or { type: 'library', quizId: '...' }
 
-  const newTitle = prompt('Rename Quiz Title:', quiz.title);
-  if (newTitle === null) return;
+function openEditQuizModal(context) {
+  currentEditModalContext = context;
+  if (!editQuizModal || !modalQuizTitleInput || !modalQuizSectionSelect) return;
 
   const sections = getStoredSections().filter(s => s !== 'All');
-  const newSection = prompt(`Change Folder (Available: ${sections.join(', ')}):`, quiz.section || 'General');
+  modalQuizSectionSelect.innerHTML = '';
+  sections.forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec;
+    opt.textContent = sec;
+    modalQuizSectionSelect.appendChild(opt);
+  });
 
-  if (newTitle.trim()) {
-    quiz.title = newTitle.trim();
+  let currentTitle = '';
+  let currentSection = 'General';
+
+  if (context.type === 'active') {
+    if (!currentQuizData) {
+      showToast('No active quiz to rename!', 'error');
+      return;
+    }
+    currentTitle = currentQuizData.title || currentData?.title || 'Video Quiz';
+    currentSection = currentQuizData.section || (quizSectionSelect ? quizSectionSelect.value : 'General');
+  } else if (context.type === 'library') {
+    const quizzes = getSavedQuizzes();
+    const quiz = quizzes.find(q => q.id === context.quizId);
+    if (!quiz) return;
+    currentTitle = quiz.title || 'Video Quiz';
+    currentSection = quiz.section || 'General';
   }
-  if (newSection && newSection.trim()) {
-    quiz.section = newSection.trim();
-    if (!sections.includes(quiz.section)) {
-      const allSec = getStoredSections();
-      allSec.push(quiz.section);
-      saveStoredSections(allSec);
+
+  if (!sections.includes(currentSection)) {
+    const opt = document.createElement('option');
+    opt.value = currentSection;
+    opt.textContent = currentSection;
+    modalQuizSectionSelect.appendChild(opt);
+  }
+
+  modalQuizTitleInput.value = currentTitle;
+  modalQuizSectionSelect.value = currentSection;
+
+  editQuizModal.classList.remove('hidden');
+  editQuizModal.classList.add('flex');
+  setTimeout(() => {
+    modalQuizTitleInput.focus();
+    modalQuizTitleInput.select();
+  }, 60);
+}
+
+function closeEditQuizModal() {
+  if (editQuizModal) {
+    editQuizModal.classList.add('hidden');
+    editQuizModal.classList.remove('flex');
+  }
+  currentEditModalContext = null;
+}
+
+function handleAddSectionFromModal() {
+  const newName = prompt('Enter new folder/section name (e.g. Modern History, Python, Chemistry):');
+  if (!newName || !newName.trim()) return;
+  const cleanName = newName.trim();
+  const currentSections = getStoredSections();
+  if (!currentSections.includes(cleanName)) {
+    currentSections.push(cleanName);
+    saveStoredSections(currentSections);
+  }
+
+  const sections = currentSections.filter(s => s !== 'All');
+  modalQuizSectionSelect.innerHTML = '';
+  sections.forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec;
+    opt.textContent = sec;
+    modalQuizSectionSelect.appendChild(opt);
+  });
+  modalQuizSectionSelect.value = cleanName;
+
+  populateSectionDropdown();
+  renderLibrarySections();
+  showToast(`Created folder "${cleanName}"!`, 'success');
+}
+
+function saveQuizCustomizationFromModal() {
+  if (!currentEditModalContext) return;
+  if (!modalQuizTitleInput || !modalQuizSectionSelect) return;
+
+  const newTitle = modalQuizTitleInput.value.trim();
+  const newSection = modalQuizSectionSelect.value.trim() || 'General';
+
+  if (!newTitle) {
+    showToast('Quiz heading/title cannot be empty!', 'error');
+    modalQuizTitleInput.focus();
+    return;
+  }
+
+  if (currentEditModalContext.type === 'active') {
+    if (!currentQuizData) return;
+    currentQuizData.title = newTitle;
+    currentQuizData.section = newSection;
+
+    if (activeQuizTitle) activeQuizTitle.textContent = newTitle;
+    if (activeQuizSectionBadge) activeQuizSectionBadge.textContent = newSection;
+
+    const quizzes = getSavedQuizzes();
+    const existingIdx = quizzes.findIndex(q => q.id === currentQuizData.id || (currentQuizData.storageId && q.id === currentQuizData.storageId));
+    if (existingIdx !== -1) {
+      quizzes[existingIdx].title = newTitle;
+      quizzes[existingIdx].section = newSection;
+      localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+    }
+
+    showToast(`Quiz renamed to "${newTitle}"!`, 'success');
+  } else if (currentEditModalContext.type === 'library') {
+    const quizzes = getSavedQuizzes();
+    const quiz = quizzes.find(q => q.id === currentEditModalContext.quizId);
+    if (quiz) {
+      quiz.title = newTitle;
+      quiz.section = newSection;
+      localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+
+      if (currentQuizData && (currentQuizData.id === quiz.id || currentQuizData.storageId === quiz.id)) {
+        currentQuizData.title = newTitle;
+        currentQuizData.section = newSection;
+        if (activeQuizTitle) activeQuizTitle.textContent = newTitle;
+        if (activeQuizSectionBadge) activeQuizSectionBadge.textContent = newSection;
+      }
+
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+      showToast(`Quiz updated to "${newTitle}"!`, 'success');
     }
   }
 
-  localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
-  renderLibrarySections();
-  renderLibraryQuizzesGrid();
-  showToast('Quiz details updated!', 'success');
+  closeEditQuizModal();
 }
 
 function saveCurrentQuizLocally() {

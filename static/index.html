@@ -352,6 +352,19 @@
                 <option value="UPSC & Exams">UPSC & Exams</option>
               </select>
             </div>
+
+            <!-- Custom Quiz Heading / Title Input -->
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">
+                <i class="fa-solid fa-heading text-amber-400 mr-1"></i> Custom Quiz Title / Heading (Optional):
+              </label>
+              <input 
+                type="text" 
+                id="custom-quiz-title-input" 
+                placeholder="Leave blank to use video title, or type custom quiz heading..." 
+                class="w-full bg-surface-900 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
+              />
+            </div>
           </div>
 
           <div class="flex items-center justify-center gap-3">
@@ -375,8 +388,11 @@
           <!-- Sticky Header Control Bar -->
           <div class="bg-surface-900/90 border border-surface-700/80 rounded-2xl p-4 shadow-xl backdrop-blur-xl flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div class="flex items-center gap-2">
-                <h3 id="active-quiz-title" class="font-extrabold text-white text-sm sm:text-base">Video Quiz</h3>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 id="active-quiz-title" class="font-extrabold text-white text-sm sm:text-base cursor-pointer hover:text-amber-400 transition-colors flex items-center gap-1.5" title="Click to rename quiz">Video Quiz</h3>
+                <button id="edit-active-quiz-title-btn" class="p-1 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" title="Rename Quiz Title & Folder">
+                  <i class="fa-solid fa-pen-to-square text-xs"></i>
+                </button>
                 <span id="active-quiz-section-badge" class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold">General</span>
               </div>
               <div class="flex items-center gap-2.5 text-xs text-slate-400 mt-0.5">
@@ -511,6 +527,56 @@
       </button>
     </div>
 
+  </div>
+
+  <!-- Modal: Custom Edit Quiz Title & Folder -->
+  <div id="edit-quiz-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-surface-800">
+        <h3 class="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+          <i class="fa-solid fa-pen-to-square text-amber-400"></i>
+          <span>Customize Quiz Title & Folder</span>
+        </h3>
+        <button id="close-edit-modal-btn" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-surface-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">
+            Quiz Heading / Title:
+          </label>
+          <input 
+            type="text" 
+            id="modal-quiz-title-input" 
+            class="w-full bg-surface-850 border border-surface-700 text-white rounded-xl p-3 text-xs sm:text-sm font-semibold focus:outline-none focus:border-amber-400 placeholder:text-slate-500" 
+            placeholder="e.g. Modern Indian History - Chapter 1" 
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">
+            Assign to Folder / Section:
+          </label>
+          <div class="flex gap-2">
+            <select id="modal-quiz-section-select" class="flex-1 bg-surface-850 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 cursor-pointer"></select>
+            <button id="modal-add-section-btn" type="button" class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-cyan-300 border border-surface-700 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer">
+              + New Folder
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-surface-800">
+        <button id="cancel-edit-modal-btn" type="button" class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer">
+          Cancel
+        </button>
+        <button id="save-edit-modal-btn" type="button" class="px-5 py-2 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white text-xs font-extrabold rounded-xl shadow-lg cursor-pointer">
+          Save Changes
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast Notification Popup -->
