@@ -26,6 +26,12 @@ Ek powerful, 100% FREE aur super-fast YouTube Transcript Generator tool jo **2 s
 
 ## 🚀 Kaise Start Karein (How to Run)
 
+### Render par YouTube transcript issue
+
+Render ka free server cloud data-center IP se YouTube ko request karta hai, jise YouTube kabhi-kabhi block kar deta hai. Project ki local `.env` file Render par upload nahi hoti. Isliye Render dashboard me service ke **Environment** section me `YOUTUBE_COOKIES` set karein, phir service redeploy karein. `render.yaml` is variable ko blueprint deploy ke waqt prompt karne ke liye declare karta hai.
+
+Cookie value apne browser se YouTube ke liye export ki hui cookies honi chahiye; ise public repository me commit ya kisi ke saath share na karein. Cookies expire ho sakti hain, to kaam band hone par nayi cookies export karke Render me update karein. YouTube ki blocking policy ke kaaran koi guaranteed, permanently free server-side bypass nahi hai.
+
 ### Tarika 1: 1-Click Launch (Sabse Aasan)
 Apne folder me maujood **`run.bat`** file par double-click karein:
 1. Server automatically start ho jayega.

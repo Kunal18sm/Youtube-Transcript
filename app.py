@@ -321,7 +321,7 @@ def build_transcript_payload(
     }
 
 def fetch_transcript_data_ytdlp(video_id: str, lang: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Fallback Engine using yt-dlp to bypass YouTube cloud datacenter blocks and 502 Bad Gateway."""
+    """Fallback Engine using yt-dlp with client impersonation and auto-retry to bypass datacenter blocks."""
     if not meta:
         meta = fetch_oembed_metadata(video_id)
 
@@ -331,78 +331,57 @@ def fetch_transcript_data_ytdlp(video_id: str, lang: Optional[str] = None, meta:
         out_tmpl = os.path.join(tmpdir, "%(id)s.%(ext)s")
         langs_to_try = []
         if lang:
-            langs_to_try.extend([f"{lang}-orig", lang])
-        langs_to_try.extend(["hi-orig", "hi", "en-orig", "en"])
+            langs_to_try.append(f"{lang}.*")
+        langs_to_try.extend(["hi.*", "en.*"])
 
-        ydl_opts = {
-            "skip_download": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": langs_to_try,
-            "subtitlesformat": "vtt",
-            "outtmpl": out_tmpl,
-            "quiet": True,
-            "no_warnings": True,
-            "ignoreerrors": True,
-            "socket_timeout": 6,
-        }
+        def attempt_ydl(use_proxy: Optional[str], player_clients: List[str]):
+            ydl_opts = {
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": langs_to_try,
+                "subtitlesformat": "vtt",
+                "outtmpl": out_tmpl,
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 6,
+                "extractor_args": {"youtube": {"player_client": player_clients}},
+            }
+            if use_proxy:
+                ydl_opts["proxy"] = use_proxy
 
-        proxy_url = get_proxy_url()
-        if proxy_url:
-            ydl_opts["proxy"] = proxy_url
-
-        cookies_raw = os.getenv("YOUTUBE_COOKIES", "").strip()
-        if cookies_raw and not cookies_raw.startswith("http") and ("# Netscape" in cookies_raw or "\t" in cookies_raw or "=" in cookies_raw):
+            info_dict = None
             try:
-                cp = os.path.join(tmpdir, "yt_cookies.txt")
-                # Normalize line separators and spaces to tabs if needed
-                lines_out = []
-                if not cookies_raw.startswith("# Netscape"):
-                    lines_out.append("# Netscape HTTP Cookie File\n")
-                for line in cookies_raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if line.startswith("#"):
-                        lines_out.append(line)
-                    elif "\t" in line:
-                        lines_out.append(line)
-                    else:
-                        parts = re.split(r'\s+', line)
-                        if len(parts) >= 7:
-                            lines_out.append("\t".join(parts[:7]))
-                if len(lines_out) > 1:
-                    with open(cp, "w", encoding="utf-8") as f:
-                        f.write("\n".join(lines_out))
-                    ydl_opts["cookiefile"] = cp
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info_dict = ydl.extract_info(url, download=True)
             except Exception:
-                ydl_opts.pop("cookiefile", None)
+                pass
+            return info_dict
 
+        configured_proxy = get_proxy_url()
         info = None
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-        except Exception as e:
-            err = str(e).lower()
-            # If cookie file failed to load, automatically discard cookies and retry immediately
-            if ("cookie" in err or "netscape" in err) and "cookiefile" in ydl_opts:
-                ydl_opts.pop("cookiefile", None)
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                except Exception as inner_e:
-                    err = str(inner_e).lower()
-                    if "unavailable" in err or "private" in err:
-                        raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
-                    raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(inner_e)[:140]}")
-            else:
-                if "unavailable" in err or "private" in err:
-                    raise HTTPException(status_code=404, detail="This video is unavailable, deleted, private, or has ended. Please check the video link (YouTube IDs are case-sensitive).")
-                raise HTTPException(status_code=500, detail=f"Transcript extraction error: {str(e)[:140]}")
+
+        # Pass 1: Try with configured proxy if provided
+        if configured_proxy:
+            info = attempt_ydl(configured_proxy, ["tv_embedded", "android_creator"])
 
         vtt_files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+
+        # Pass 2: If proxy failed/bot-blocked or wasn't provided, try DIRECT without proxy
         if not vtt_files:
-            raise HTTPException(status_code=404, detail="No transcript or captions found for this video on YouTube.")
+            info = attempt_ydl(None, ["tv_embedded", "android_creator"])
+            vtt_files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+
+        # Pass 3: If still no vtt files, try with visionos and android
+        if not vtt_files:
+            info = attempt_ydl(None, ["visionos", "android", "mweb"])
+            vtt_files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+
+        if not vtt_files:
+            raise HTTPException(
+                status_code=404,
+                detail="No transcript or captions found for this video on YouTube."
+            )
 
         chosen_vtt = vtt_files[0]
         if lang:
@@ -464,16 +443,25 @@ def fetch_video_info_ytdlp(video_id: str, meta: Dict[str, Any]) -> Dict[str, Any
         "no_warnings": True,
         "ignoreerrors": True,
         "socket_timeout": 6,
+        "extractor_args": {"youtube": {"player_client": ["tv_embedded", "android_creator"]}},
     }
     proxy_url = get_proxy_url()
+    info = None
     if proxy_url:
-        ydl_opts["proxy"] = proxy_url
+        try:
+            ydl_opts["proxy"] = proxy_url
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception:
+            pass
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    except Exception:
-        info = None
+    if not info:
+        try:
+            ydl_opts.pop("proxy", None)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception:
+            info = None
 
     languages = []
     if info:
