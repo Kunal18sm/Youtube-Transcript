@@ -152,12 +152,10 @@ const createSectionBtn = document.getElementById('create-section-btn');
 const importQuizFile = document.getElementById('import-quiz-file');
 const importCodeModalBtn = document.getElementById('import-code-modal-btn');
 
-// Live Server Status DOM Elements
+// Live Server Status Dot DOM Elements
 const serverStatusPill = document.getElementById('server-status-pill');
+const serverStatusPing = document.getElementById('server-status-ping');
 const serverStatusDot = document.getElementById('server-status-dot');
-const serverStatusText = document.getElementById('server-status-text');
-const serverOfflineBanner = document.getElementById('server-offline-banner');
-const recheckServerBtn = document.getElementById('recheck-server-btn');
 
 let isServerOnline = true;
 let healthCheckInterval = null;
@@ -337,17 +335,17 @@ async function checkServerHealth(manual = false) {
 
     if (res.ok) {
       isServerOnline = true;
-      if (serverStatusPill) {
-        serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm';
+      if (serverStatusPing) {
+        serverStatusPing.className = 'animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75';
       }
       if (serverStatusDot) {
-        serverStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
+        serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30';
       }
-      if (serverStatusText) {
-        serverStatusText.textContent = 'Live';
+      if (serverStatusPill) {
+        serverStatusPill.title = 'Server: Online (Live on port 8000)';
       }
       if (manual) {
-        showToast('🟢 Server is Live (Port 8000)!', 'success');
+        showToast('🟢 Server is Online and active!', 'success');
       }
       return true;
     } else {
@@ -355,14 +353,14 @@ async function checkServerHealth(manual = false) {
     }
   } catch (err) {
     isServerOnline = false;
-    if (serverStatusPill) {
-      serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-rose-950/80 border-rose-500/60 text-rose-300 hover:bg-rose-900/70 shadow-sm animate-pulse';
+    if (serverStatusPing) {
+      serverStatusPing.className = 'hidden';
     }
     if (serverStatusDot) {
-      serverStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+      serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-rose-500/30 animate-pulse';
     }
-    if (serverStatusText) {
-      serverStatusText.textContent = 'Offline';
+    if (serverStatusPill) {
+      serverStatusPill.title = 'Server: Offline (Click Desktop status file to start)';
     }
     if (manual) {
       showToast('🔴 Server is Offline! Click Desktop status file to start.', 'error');
@@ -379,10 +377,9 @@ function startServerHealthMonitor() {
   if (healthCheckInterval) clearInterval(healthCheckInterval);
   healthCheckInterval = setInterval(() => checkServerHealth(false), 3000);
 
-  // Manual click on status badge
+  // Manual click on status dot
   if (serverStatusPill) {
     serverStatusPill.addEventListener('click', () => {
-      if (serverStatusText) serverStatusText.textContent = 'Checking...';
       checkServerHealth(true);
     });
   }

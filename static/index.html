@@ -75,16 +75,16 @@
         <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-rose-600 flex items-center justify-center shadow-lg shadow-rose-600/20 ring-1 ring-white/10 shrink-0">
           <i class="fa-brands fa-youtube text-lg sm:text-xl text-white"></i>
         </div>
-        <div class="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white">
-            YT Transcript <span class="text-rose-500">Pro</span>
-          </h1>
+        <div class="flex items-center gap-2 sm:gap-2.5">
+          <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+            <span>YT Transcript <span class="text-rose-500">Pro</span></span>
 
-          <!-- Live Server Status Indicator (Compact Pill: Live / Offline) -->
-          <button id="server-status-pill" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm" title="Server Status: Click to refresh / test connection">
-            <span id="server-status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span id="server-status-text">Live</span>
-          </button>
+            <!-- Live Server Status Indicator (Only Green or Red Dot) -->
+            <button id="server-status-pill" class="relative flex items-center justify-center p-1 rounded-full cursor-pointer hover:scale-125 transition-transform" title="Server: Online (Click to test)">
+              <span id="server-status-ping" class="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="server-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30"></span>
+            </button>
+          </h1>
         </div>
       </div>
 
