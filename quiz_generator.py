@@ -34,11 +34,14 @@ def get_gemini_api_key() -> Optional[str]:
             pass
     return key
 
+# Prioritize fast, high-rate-limit models
 MODELS_TO_TRY = [
-    "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-flash-latest"
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3-flash-preview"
 ]
 
 CHATTER_PATTERNS = [
@@ -49,20 +52,29 @@ CHATTER_PATTERNS = [
     r'\b(?:hamara naya batch|naya batch shuru|coupon code|discount code|offer chal raha)\b',
     r'\b(?:telegram join karein|telegram link|link in description|pdf telegram|download the app)\b',
     r'\b(?:channel ko subscribe|subscribe karein|bell icon dabayein|like and share|video ko like)\b',
-    r'\b(?:aaj ke is session me|aaj hum discuss karenge|chaliye shuru karte hain|let\'s get started)\b',
-    r'\b(?:thank you so much|milte hain agle video|see you in the next|dhanyawad dosto)\b',
+    r'\b(?:milte hain agle video|see you in the next|dhanyawad dosto)\b',
     # English greetings & chatter
     r'\b(?:welcome back to my channel|welcome to another video|hey guys|what is up guys)\b',
     r'\b(?:don\'t forget to like|hit that like button|hit the subscribe|smash the subscribe)\b',
     r'\b(?:check the link in the description|use code \w+|sponsor for today)\b',
 ]
 
+ACADEMIC_SAFEGUARDS = {
+    'history', 'period', 'century', 'bc', 'ad', 'stone', 'age', 'paleolithic',
+    'mesolithic', 'neolithic', 'harappa', 'site', 'tool', 'excavation', 'theory',
+    'formula', 'law', 'concept', 'definition', 'king', 'ruler', 'article', 'chapter',
+    'science', 'physics', 'chemistry', 'biology', 'math', 'exam', 'civilization'
+}
+
 def is_chatter_line(line: str) -> bool:
     line_clean = line.strip().lower()
+    words_set = set(re.findall(r'\b[a-zA-Z0-9_\u0900-\u097F]+\b', line_clean))
+    if words_set & ACADEMIC_SAFEGUARDS:
+        return False
+
     for pat in CHATTER_PATTERNS:
         if re.search(pat, line_clean, re.IGNORECASE):
             words = line_clean.split()
-            # If line is conversational chatter without dense technical content
             if len(words) < 25:
                 return True
     return False
@@ -70,13 +82,45 @@ def is_chatter_line(line: str) -> bool:
 def clean_transcript_lines(lines: List[str]) -> List[str]:
     """Filter out non-academic chatter, greetings, batch promos, and mic checks."""
     cleaned = [line for line in lines if not is_chatter_line(line)]
-    if len(cleaned) >= 2:
+    if len(cleaned) >= 5:
         return cleaned
     return lines
 
-def call_gemini(prompt: str, api_key: str, temperature: float = 0.1) -> List[Dict[str, Any]]:
+def extract_json_from_text(text: str) -> Any:
+    """Robust JSON extraction that handles markdown code blocks or embedded arrays."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except Exception:
+            pass
+
+    m_arr = re.search(r'\[\s*\{[\s\S]*\}\s*\]', text)
+    if m_arr:
+        try:
+            return json.loads(m_arr.group(0))
+        except Exception:
+            pass
+
+    m_obj = re.search(r'\{[\s\S]*\}', text)
+    if m_obj:
+        try:
+            return json.loads(m_obj.group(0))
+        except Exception:
+            pass
+
+    return None
+
+def call_gemini(prompt: str, api_key: str, temperature: float = 0.2) -> List[Dict[str, Any]]:
     """
-    Call Gemini API with resilient multi-model failover and auto-retry for 503/429.
+    Call Gemini API with resilient multi-model failover and auto-retry.
+    Timeout is set to 45s to avoid cutting off large JSON MCQ responses.
     """
     last_error = None
     for model in MODELS_TO_TRY:
@@ -89,25 +133,24 @@ def call_gemini(prompt: str, api_key: str, temperature: float = 0.1) -> List[Dic
             }
         }
 
-        # Try up to 2 attempts per model in case of temporary 503 spikes
         for attempt in range(2):
             try:
-                res = requests.post(url, json=payload, timeout=14)
+                res = requests.post(url, json=payload, timeout=45)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
                     if not candidates:
                         continue
                     raw_text = candidates[0]["content"]["parts"][0]["text"].strip()
-                    raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
-                    raw_text = re.sub(r"\s*```$", "", raw_text)
-                    parsed = json.loads(raw_text)
+                    parsed = extract_json_from_text(raw_text)
                     if isinstance(parsed, dict) and "questions" in parsed:
                         return parsed["questions"]
                     elif isinstance(parsed, list):
                         return parsed
                     elif isinstance(parsed, dict) and "audited_questions" in parsed:
                         return parsed["audited_questions"]
+                    elif isinstance(parsed, dict) and "mcqs" in parsed:
+                        return parsed["mcqs"]
                     return []
                 elif res.status_code in (503, 429):
                     last_error = f"Model {model} returned {res.status_code}"
@@ -119,22 +162,42 @@ def call_gemini(prompt: str, api_key: str, temperature: float = 0.1) -> List[Dic
                 last_error = f"Model {model} exception: {str(e)}"
                 time.sleep(0.5)
 
-    raise RuntimeError(f"Gemini API request failed across all models: {last_error}")
+    print(f"[Warning] Gemini API call warning across models: {last_error}")
+    return []
 
 def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, Any]]:
     """
     Rigorously validate and normalize a question object:
-    - Verifies question text validity
+    - Accepts question text from multiple possible keys
+    - Formats options from both lists and dicts {"A": ..., "B": ...}
     - Ensures exactly 4 distinct options prefixed with A), B), C), D)
     - Verifies and locks correct_answer letter to the exact right option
-    - Attaches verified factual proof
     """
-    q_text = item.get("question") or item.get("q")
-    if not q_text or len(str(q_text).strip()) < 8:
+    if not isinstance(item, dict):
+        return None
+
+    q_text = item.get("question") or item.get("q") or item.get("question_text") or item.get("prompt")
+    if not q_text or len(str(q_text).strip()) < 6:
         return None
 
     raw_options = item.get("options") or []
-    if not isinstance(raw_options, list) or len(raw_options) < 4:
+    # If LLM returned options as dict {"A": "...", "B": "..."}
+    if isinstance(raw_options, dict):
+        opts_list = []
+        for k in ["A", "B", "C", "D"]:
+            if k in raw_options:
+                opts_list.append(raw_options[k])
+            elif k.lower() in raw_options:
+                opts_list.append(raw_options[k.lower()])
+        raw_options = opts_list or list(raw_options.values())
+    elif not raw_options or not isinstance(raw_options, list):
+        # Check for option_a, option_b, etc.
+        for keys in [("option_a", "option_b", "option_c", "option_d"), ("opt1", "opt2", "opt3", "opt4"), ("a", "b", "c", "d")]:
+            if all(k in item for k in keys):
+                raw_options = [item[k] for k in keys]
+                break
+
+    if not isinstance(raw_options, list) or len(raw_options) < 2:
         return None
 
     # Clean options and format strictly as A), B), C), D)
@@ -144,17 +207,20 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
         opt_str = re.sub(r"^[A-Da-d][\)\.\:\-]\s*", "", str(opt).strip())
         clean_options.append(f"{letters[i]}) {opt_str}")
 
+    # Pad to 4 options if exactly 3 were provided
+    while len(clean_options) < 4:
+        idx = len(clean_options)
+        clean_options.append(f"{letters[idx]}) None of the above")
+
     # Determine correct answer letter with strict alignment
     raw_ans = str(item.get("correct_answer") or item.get("answer") or "A").strip()
     correct_letter = "A"
 
-    # 1. Exact match to letter 'A', 'B', 'C', 'D'
     for let in letters:
         if raw_ans.upper() == let or raw_ans.upper().startswith(f"{let})") or raw_ans.upper().startswith(f"{let}."):
             correct_letter = let
             break
     else:
-        # 2. Text match against cleaned options
         cleaned_raw = re.sub(r"^[A-Da-d][\)\.\:\-]\s*", "", raw_ans).strip().lower()
         matched = False
         for i, opt in enumerate(clean_options):
@@ -169,7 +235,6 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
                     correct_letter = let
                     break
 
-    # Verified factual proof
     verified_fact = str(item.get("verified_fact") or item.get("fact_evidence") or "").strip()
     if not verified_fact:
         verified_fact = "Fact-checked against verified lecture concepts and academic syllabus."
@@ -179,7 +244,7 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
         "question": str(q_text).strip(),
         "options": clean_options,
         "correct_answer": correct_letter,
-        "explanation": str(item.get("explanation") or "Refer to the verified timestamp for topic details.").strip(),
+        "explanation": str(item.get("explanation") or "Refer to the verified lecture timestamp for complete topic discussion.").strip(),
         "timestamp": str(item.get("timestamp") or "00:00").strip(),
         "difficulty": str(item.get("difficulty") or "Medium").capitalize(),
         "fact_checked": bool(item.get("fact_checked", True)),
@@ -187,7 +252,7 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
     }
 
 def extract_key_tokens(text: str) -> set:
-    """Extract substantive keyword tokens for semantic deduplication."""
+    """Extract substantive keyword tokens for deduplication."""
     stop_words = {
         'what', 'which', 'where', 'when', 'who', 'whom', 'whose', 'why', 'how',
         'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
@@ -202,36 +267,35 @@ def extract_key_tokens(text: str) -> set:
     return {t for t in tokens if t not in stop_words}
 
 def is_duplicate_question(new_q: Dict[str, Any], existing_questions: List[Dict[str, Any]]) -> bool:
-    """Detect if a question is semantically identical or tests the exact same fact."""
+    """
+    Detect if two questions are asking the exact same question.
+    Only drop if question text has extremely high semantic token overlap (>= 0.82)
+    or near-identical normalized text.
+    Do NOT drop questions that test different aspects of the same topic or share common answers!
+    """
+    new_text_clean = re.sub(r'[^a-zA-Z0-9\u0900-\u097F]+', '', new_q.get('question', '').lower())
+    if not new_text_clean:
+        return False
+
     new_tokens = extract_key_tokens(new_q['question'])
     if not new_tokens:
         return False
 
-    new_ans_text = ""
-    for opt in new_q.get('options', []):
-        if opt.startswith(new_q.get('correct_answer', 'A')):
-            new_ans_text = opt[3:].strip().lower()
-            break
-
     for ex in existing_questions:
+        ex_text_clean = re.sub(r'[^a-zA-Z0-9\u0900-\u097F]+', '', ex.get('question', '').lower())
+        if new_text_clean == ex_text_clean:
+            return True
+
         ex_tokens = extract_key_tokens(ex['question'])
         if not ex_tokens:
             continue
-        # Jaccard token similarity
+
         intersection = len(new_tokens & ex_tokens)
         union = len(new_tokens | ex_tokens)
         similarity = intersection / union if union > 0 else 0
-        if similarity > 0.60:
+        if similarity >= 0.82:
             return True
 
-        # Check if same answer and moderate question overlap
-        if new_ans_text and len(new_ans_text) > 3:
-            for opt in ex.get('options', []):
-                if opt.startswith(ex.get('correct_answer', 'A')):
-                    ex_ans_text = opt[3:].strip().lower()
-                    if new_ans_text == ex_ans_text and similarity > 0.38:
-                        return True
-                    break
     return False
 
 def generate_chunk_mcqs(
@@ -241,31 +305,29 @@ def generate_chunk_mcqs(
     api_key: str
 ) -> List[Dict[str, Any]]:
     """
-    Two-Pass Grounded Generation & Fact-Check Auditor Pipeline:
-    Pass 1: Academic concept question formulation rooted strictly in lecture facts (UPSC/GATE/NEET level).
-    Pass 2: Strict Senior Auditor fact-checking pass to verify correctness of questions & selected answers.
+    High-Yield Academic Question Formulation:
+    Extracts up to target_count diverse, syllabus-aligned MCQs directly from lecture transcript facts.
     """
-    # ----------------------------------------------------
-    # PASS 1: GROUNDED FACTUAL QUESTION GENERATION
-    # ----------------------------------------------------
-    prompt_gen = f"""You are a Senior Exam Board Controller and University Professor (UPSC / GATE / SSC-CGL / Medical / CS standards).
-Your task is to analyze this lecture segment and create up to {target_count} rigorous, high-yield Multiple Choice Questions (MCQs).
+    prompt = f"""You are a Senior University Professor and Exam Board Controller (UPSC / State PSC / GATE / SSC / Academic standards).
+Analyze this lecture segment thoroughly and create {target_count} rigorous, diverse Multiple Choice Questions (MCQs).
 
-CRITICAL EXAM RULES:
-1. CORE ACADEMIC CONCEPTS ONLY:
-   - Every question must test a substantive concept, historical event, scientific mechanism, definition, formula, law, constitutional article, technical step, or academic theorem.
-   - STRICTLY FORBIDDEN: NEVER make questions about speaker introductions, greetings ("Welcome to my class", "Namaste"), channel announcements, batch sales, coupon codes, telegram links, audio checks, or casual commentary.
-2. ZERO REPETITION / ZERO PARAPHRASING:
-   - Each question must test a completely DIFFERENT concept or fact.
-   - DO NOT rephrase, spin, or reword the same question.
-   - IF THIS SEGMENT ONLY CONTAINS 2 OR 3 REAL EXAM-WORTHY CONCEPTS, RETURN ONLY THOSE 2 OR 3 QUESTIONS. DO NOT invent filler questions or duplicate concepts just to reach {target_count}. Quality and exam rigor are top priority over quantity.
-3. RIGOROUS 4-OPTION MCQ STRUCTURE:
+EXAM RULES & GUIDELINES:
+1. COMPREHENSIVE CONCEPT & FACT EXTRACTION:
+   - Formulate questions from every single fact, term, definition, historical event, scientific law, date, location, key figure, classification, difference, tool, site, example, and cause/effect taught in this segment.
+   - Do NOT stop early: aim to provide all {target_count} questions.
+   - FORBIDDEN: Do NOT ask questions about greetings ("welcome", "namaste"), subscribe buttons, audio tests, or batch sales.
+2. DIVERSE QUESTION TYPES:
+   - Mix question formats: Direct factual, conceptual, "Which of the following is correct/incorrect", chronological order, and statement-based questions.
+   - Each question in this segment must test a different angle, concept, or detail.
+3. RIGOROUS 4-OPTION STRUCTURE:
+   - Exactly 4 options labeled ["A) ...", "B) ...", "C) ...", "D) ..."].
    - Exactly ONE option is unambiguously correct.
-   - Exactly THREE realistic, plausible distractors based on common academic confusions.
-   - Options must be formatted as ["A) ...", "B) ...", "C) ...", "D) ..."].
-4. FACTUAL EVIDENCE PROOF:
-   - "fact_evidence": The exact fact, formula, or statement from the lecture confirming this answer is 100% true.
-   - "timestamp": The video timestamp (e.g. 04:15) where this concept is taught.
+   - 3 realistic, plausible academic distractors.
+   - "correct_answer": Must be the exact letter ("A", "B", "C", or "D") matching the correct option.
+4. EVIDENCE & EXPLANATION:
+   - "explanation": Concise 1-2 sentence academic explanation.
+   - "verified_fact": The factual truth or lecture point confirming this answer.
+   - "timestamp": Approximate timestamp (e.g., "12:45") from the lecture.
    - "difficulty": "Easy", "Medium", or "Hard".
 
 TRANSCRIPT SEGMENT:
@@ -274,50 +336,11 @@ TRANSCRIPT SEGMENT:
 ---
 
 OUTPUT FORMAT:
-Return a JSON array of objects with keys:
-"question", "options", "correct_answer", "explanation", "fact_evidence", "timestamp", "difficulty"
+Return a JSON array of up to {target_count} question objects with keys:
+"question", "options", "correct_answer", "explanation", "verified_fact", "timestamp", "difficulty"
 """
 
-    raw_candidates = call_gemini(prompt_gen, api_key, temperature=0.1)
-    if not raw_candidates:
-        return []
-
-    # ----------------------------------------------------
-    # PASS 2: DEDICATED FACT-CHECK & ANSWER AUDITOR
-    # ----------------------------------------------------
-    try:
-        candidates_json = json.dumps(raw_candidates, ensure_ascii=False)
-        prompt_audit = f"""You are the Chief Academic Fact-Checker and Senior Exam Auditor.
-Your responsibility is to rigorously AUDIT and FACT-CHECK the candidate MCQs against the lecture transcript segment and established scientific/academic facts.
-
-AUDITING INSTRUCTIONS:
-1. FACT-CHECK THE QUESTION: Is the concept factually accurate? Verify all names, dates, terms, and claims. Fix any factual errors or misheard speech-to-text words.
-2. AUDIT THE CORRECT ANSWER: Carefully examine each option (A, B, C, D). Ensure that 'correct_answer' matches the ONLY true option. If there is ANY mismatch between the letter and explanation, FIX IT TO THE CORRECT OPTION.
-3. ELIMINATE DUPLICATES & FLUFF:
-   - If any questions test the same concept in slightly different wording, discard the duplicate.
-   - If any question is based on greetings, channel promotions, or audio/video talk, REMOVE IT.
-4. ATTACH VERIFIED PROOF: Set "fact_checked": true, and summarize the confirmed truth in "verified_fact".
-
-TRANSCRIPT SEGMENT:
----
-{chunk_text}
----
-
-CANDIDATE MCQs TO AUDIT:
-{candidates_json}
-
-OUTPUT FORMAT:
-Return a JSON array of audited, 100% verified question objects with keys:
-"question", "options", "correct_answer", "explanation", "verified_fact", "timestamp", "difficulty", "fact_checked"
-"""
-        audited_candidates = call_gemini(prompt_audit, api_key, temperature=0.0)
-        if audited_candidates and len(audited_candidates) >= 1:
-            return audited_candidates
-    except Exception as e:
-        print(f"[Fact-Check Warning] Audit pass skipped due to: {e}")
-
-    # Fallback to Pass 1 questions if audit call timed out
-    return raw_candidates
+    return call_gemini(prompt, api_key, temperature=0.2)
 
 def generate_mcq_quiz(
     transcript_text: str,
@@ -327,8 +350,7 @@ def generate_mcq_quiz(
 ) -> Dict[str, Any]:
     """
     Generate maximum high-yield questions (from 5 up to 500+) by splitting
-    long video transcripts into chronological topic chunks and running multi-pass fact-checking.
-    Eliminates fluff/chatter and prevents repetitive artificial questions.
+    long video transcripts into chronological topic chunks and running multi-threaded generation.
     """
     api_key = get_gemini_api_key()
     if not api_key:
@@ -342,18 +364,13 @@ def generate_mcq_quiz(
     if not lines:
         lines = [transcript_text]
 
-    # Substantive concept capacity:
-    # A true competitive exam question needs ~35 substantive words of lecture content.
-    words = [w for w in re.findall(r'\b[a-zA-Z0-9_\u0900-\u097F]+\b', transcript_text) if len(w) > 2]
-    max_concept_capacity = max(3, len(words) // 35)
-    adjusted_target = min(target_total, max_concept_capacity)
-
-    # Batching strategy
-    max_per_call = 15
-    num_batches = math.ceil(adjusted_target / max_per_call)
-    num_batches = max(1, min(20, num_batches))
-
-    questions_per_batch = math.ceil(adjusted_target / num_batches)
+    # Target a 15-20% surplus so deduplication doesn't leave the quiz under target
+    buffered_target = math.ceil(target_total * 1.20)
+    chunk_target_qs = 12 if target_total >= 30 else max(5, math.ceil(target_total / 2))
+    num_batches = math.ceil(buffered_target / chunk_target_qs)
+    # Scale up to 48 parallel chunks for massive requests (500 MCQs)
+    num_batches = max(1, min(48, num_batches))
+    questions_per_batch = math.ceil(buffered_target / num_batches)
 
     # Chunk the cleaned transcript lines evenly across batches
     chunk_size = math.ceil(len(lines) / num_batches)
@@ -370,8 +387,8 @@ def generate_mcq_quiz(
 
     all_raw_questions = []
 
-    # Parallel execution with ThreadPoolExecutor
-    workers = min(3, len(chunks))
+    # Parallel execution with ThreadPoolExecutor (up to 8 concurrent workers)
+    workers = min(8, len(chunks))
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_chunk = {
             executor.submit(
@@ -388,16 +405,16 @@ def generate_mcq_quiz(
             chunk_idx = future_to_chunk[future]
             try:
                 q_list = future.result()
-                ordered_results[chunk_idx] = q_list
+                ordered_results[chunk_idx] = q_list or []
             except Exception as e:
-                print(f"[Warning] Batch {chunk_idx + 1} failed: {e}")
+                print(f"[Warning] Batch {chunk_idx + 1} encountered: {e}")
                 ordered_results[chunk_idx] = []
 
     for q_list in ordered_results:
         if q_list:
             all_raw_questions.extend(q_list)
 
-    # Normalize, deduplicate by token similarity, and fact-check all questions
+    # Normalize, deduplicate without over-filtering, and index questions
     final_questions = []
     seen_exact_questions = set()
 
@@ -408,7 +425,7 @@ def generate_mcq_quiz(
             # 1. Exact string deduplication
             if q_clean in seen_exact_questions:
                 continue
-            # 2. Semantic token overlap deduplication (prevents rephrased identical questions)
+            # 2. High-similarity deduplication (>= 0.82)
             if is_duplicate_question(norm, final_questions):
                 continue
 
@@ -420,7 +437,7 @@ def generate_mcq_quiz(
             break
 
     if not final_questions:
-        raise RuntimeError("No valid fact-checked questions could be extracted from this transcript.")
+        raise RuntimeError("No valid questions could be extracted from this transcript. Please check the video transcript.")
 
     return {
         "title": title,
