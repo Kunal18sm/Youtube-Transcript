@@ -34,6 +34,39 @@ MODELS_TO_TRY = [
     "gemini-flash-latest"
 ]
 
+CHATTER_PATTERNS = [
+    # Hindi / Hinglish greetings & chatter
+    r'\b(?:namaskar|namaste|hello dosto|kaise ho|kaise hain|swagat hai|aap sabhi ka)\b',
+    r'\b(?:audio video clear|meri aawaz aa rahi|aawaz aa rahi hai|am i audible|can you hear me)\b',
+    r'\b(?:comment karke batao|thumbs up de do|chat box me batao|live chat me batao)\b',
+    r'\b(?:hamara naya batch|naya batch shuru|coupon code|discount code|offer chal raha)\b',
+    r'\b(?:telegram join karein|telegram link|link in description|pdf telegram|download the app)\b',
+    r'\b(?:channel ko subscribe|subscribe karein|bell icon dabayein|like and share|video ko like)\b',
+    r'\b(?:aaj ke is session me|aaj hum discuss karenge|chaliye shuru karte hain|let\'s get started)\b',
+    r'\b(?:thank you so much|milte hain agle video|see you in the next|dhanyawad dosto)\b',
+    # English greetings & chatter
+    r'\b(?:welcome back to my channel|welcome to another video|hey guys|what is up guys)\b',
+    r'\b(?:don\'t forget to like|hit that like button|hit the subscribe|smash the subscribe)\b',
+    r'\b(?:check the link in the description|use code \w+|sponsor for today)\b',
+]
+
+def is_chatter_line(line: str) -> bool:
+    line_clean = line.strip().lower()
+    for pat in CHATTER_PATTERNS:
+        if re.search(pat, line_clean, re.IGNORECASE):
+            words = line_clean.split()
+            # If line is conversational chatter without dense technical content
+            if len(words) < 25:
+                return True
+    return False
+
+def clean_transcript_lines(lines: List[str]) -> List[str]:
+    """Filter out non-academic chatter, greetings, batch promos, and mic checks."""
+    cleaned = [line for line in lines if not is_chatter_line(line)]
+    if len(cleaned) >= 2:
+        return cleaned
+    return lines
+
 def call_gemini(prompt: str, api_key: str, temperature: float = 0.1) -> List[Dict[str, Any]]:
     """
     Call Gemini API with resilient multi-model failover and auto-retry for 503/429.
@@ -146,6 +179,54 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
         "verified_fact": verified_fact
     }
 
+def extract_key_tokens(text: str) -> set:
+    """Extract substantive keyword tokens for semantic deduplication."""
+    stop_words = {
+        'what', 'which', 'where', 'when', 'who', 'whom', 'whose', 'why', 'how',
+        'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+        'do', 'does', 'did', 'the', 'a', 'an', 'and', 'or', 'but', 'if', 'because',
+        'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against',
+        'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+        'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under',
+        'kya', 'hai', 'hain', 'ka', 'ki', 'ke', 'ko', 'se', 'me', 'mein', 'par',
+        'aur', 'ya', 'nahi', 'tha', 'thi', 'the', 'batao', 'kaun', 'kaise', 'kis'
+    }
+    tokens = re.findall(r'\b[a-zA-Z0-9_\u0900-\u097F]{3,}\b', text.lower())
+    return {t for t in tokens if t not in stop_words}
+
+def is_duplicate_question(new_q: Dict[str, Any], existing_questions: List[Dict[str, Any]]) -> bool:
+    """Detect if a question is semantically identical or tests the exact same fact."""
+    new_tokens = extract_key_tokens(new_q['question'])
+    if not new_tokens:
+        return False
+
+    new_ans_text = ""
+    for opt in new_q.get('options', []):
+        if opt.startswith(new_q.get('correct_answer', 'A')):
+            new_ans_text = opt[3:].strip().lower()
+            break
+
+    for ex in existing_questions:
+        ex_tokens = extract_key_tokens(ex['question'])
+        if not ex_tokens:
+            continue
+        # Jaccard token similarity
+        intersection = len(new_tokens & ex_tokens)
+        union = len(new_tokens | ex_tokens)
+        similarity = intersection / union if union > 0 else 0
+        if similarity > 0.60:
+            return True
+
+        # Check if same answer and moderate question overlap
+        if new_ans_text and len(new_ans_text) > 3:
+            for opt in ex.get('options', []):
+                if opt.startswith(ex.get('correct_answer', 'A')):
+                    ex_ans_text = opt[3:].strip().lower()
+                    if new_ans_text == ex_ans_text and similarity > 0.38:
+                        return True
+                    break
+    return False
+
 def generate_chunk_mcqs(
     chunk_text: str,
     target_count: int,
@@ -154,27 +235,30 @@ def generate_chunk_mcqs(
 ) -> List[Dict[str, Any]]:
     """
     Two-Pass Grounded Generation & Fact-Check Auditor Pipeline:
-    Pass 1: Academic concept question formulation rooted strictly in lecture facts.
+    Pass 1: Academic concept question formulation rooted strictly in lecture facts (UPSC/GATE/NEET level).
     Pass 2: Strict Senior Auditor fact-checking pass to verify correctness of questions & selected answers.
     """
     # ----------------------------------------------------
     # PASS 1: GROUNDED FACTUAL QUESTION GENERATION
     # ----------------------------------------------------
-    prompt_gen = f"""You are a top-tier Senior Professor and Exam Board Controller (UPSC / GATE / CS / Medical standards).
-Your task is to analyze this lecture transcript segment and create EXACTLY {target_count} rigorous, high-yield Multiple Choice Questions (MCQs).
+    prompt_gen = f"""You are a Senior Exam Board Controller and University Professor (UPSC / GATE / SSC-CGL / Medical / CS standards).
+Your task is to analyze this lecture segment and create up to {target_count} rigorous, high-yield Multiple Choice Questions (MCQs).
 
-MANDATORY RULES:
-1. ONLY ASK QUESTIONS ABOUT THE REAL SUBJECT MATTER (History, Science, Math, Engineering, Coding, etc.).
-2. ZERO TOLERANCE FOR FLUFF:
-   - NEVER ask questions about speaker greetings, introductions, channel subscriptions, like requests, or sponsor mentions.
-3. Every question must test a REAL, VERIFIED ACADEMIC FACT or CONCEPT taught in this segment.
-4. For each question, provide:
-   - "question": Strict, unambiguous academic question.
-   - "options": 4 distinct options ["A) ...", "B) ...", "C) ...", "D) ..."].
-   - "correct_answer": The exact correct letter ('A', 'B', 'C', or 'D').
-   - "explanation": Clear educational explanation.
-   - "fact_evidence": The exact fact, formula, or statement from the lecture that proves this answer is 100% true.
-   - "timestamp": The exact video timestamp where this fact was stated (e.g. 05:20).
+CRITICAL EXAM RULES:
+1. CORE ACADEMIC CONCEPTS ONLY:
+   - Every question must test a substantive concept, historical event, scientific mechanism, definition, formula, law, constitutional article, technical step, or academic theorem.
+   - STRICTLY FORBIDDEN: NEVER make questions about speaker introductions, greetings ("Welcome to my class", "Namaste"), channel announcements, batch sales, coupon codes, telegram links, audio checks, or casual commentary.
+2. ZERO REPETITION / ZERO PARAPHRASING:
+   - Each question must test a completely DIFFERENT concept or fact.
+   - DO NOT rephrase, spin, or reword the same question.
+   - IF THIS SEGMENT ONLY CONTAINS 2 OR 3 REAL EXAM-WORTHY CONCEPTS, RETURN ONLY THOSE 2 OR 3 QUESTIONS. DO NOT invent filler questions or duplicate concepts just to reach {target_count}. Quality and exam rigor are top priority over quantity.
+3. RIGOROUS 4-OPTION MCQ STRUCTURE:
+   - Exactly ONE option is unambiguously correct.
+   - Exactly THREE realistic, plausible distractors based on common academic confusions.
+   - Options must be formatted as ["A) ...", "B) ...", "C) ...", "D) ..."].
+4. FACTUAL EVIDENCE PROOF:
+   - "fact_evidence": The exact fact, formula, or statement from the lecture confirming this answer is 100% true.
+   - "timestamp": The video timestamp (e.g. 04:15) where this concept is taught.
    - "difficulty": "Easy", "Medium", or "Hard".
 
 TRANSCRIPT SEGMENT:
@@ -183,7 +267,8 @@ TRANSCRIPT SEGMENT:
 ---
 
 OUTPUT FORMAT:
-Return a JSON array of objects with keys: "question", "options", "correct_answer", "explanation", "fact_evidence", "timestamp", "difficulty".
+Return a JSON array of objects with keys:
+"question", "options", "correct_answer", "explanation", "fact_evidence", "timestamp", "difficulty"
 """
 
     raw_candidates = call_gemini(prompt_gen, api_key, temperature=0.1)
@@ -201,9 +286,10 @@ Your responsibility is to rigorously AUDIT and FACT-CHECK the candidate MCQs aga
 AUDITING INSTRUCTIONS:
 1. FACT-CHECK THE QUESTION: Is the concept factually accurate? Verify all names, dates, terms, and claims. Fix any factual errors or misheard speech-to-text words.
 2. AUDIT THE CORRECT ANSWER: Carefully examine each option (A, B, C, D). Ensure that 'correct_answer' matches the ONLY true option. If there is ANY mismatch between the letter and explanation, FIX IT TO THE CORRECT OPTION.
-3. ELIMINATE AMBIGUITY: Ensure exactly ONE option is correct. The other 3 options must be definitively incorrect distractors.
+3. ELIMINATE DUPLICATES & FLUFF:
+   - If any questions test the same concept in slightly different wording, discard the duplicate.
+   - If any question is based on greetings, channel promotions, or audio/video talk, REMOVE IT.
 4. ATTACH VERIFIED PROOF: Set "fact_checked": true, and summarize the confirmed truth in "verified_fact".
-5. REJECT TRIVIAL QUESTIONS: If any question is about greetings or non-academic talk, replace it with a genuine concept question.
 
 TRANSCRIPT SEGMENT:
 ---
@@ -235,6 +321,7 @@ def generate_mcq_quiz(
     """
     Generate maximum high-yield questions (from 5 up to 500+) by splitting
     long video transcripts into chronological topic chunks and running multi-pass fact-checking.
+    Eliminates fluff/chatter and prevents repetitive artificial questions.
     """
     api_key = get_gemini_api_key()
     if not api_key:
@@ -242,19 +329,26 @@ def generate_mcq_quiz(
 
     target_total = max(3, min(500, int(num_questions)))
 
-    # Split transcript into lines
-    lines = [line.strip() for line in transcript_text.splitlines() if line.strip()]
+    # Split transcript into lines and filter non-academic intro/promo chatter
+    raw_lines = [line.strip() for line in transcript_text.splitlines() if line.strip()]
+    lines = clean_transcript_lines(raw_lines)
     if not lines:
         lines = [transcript_text]
 
+    # Substantive concept capacity:
+    # A true competitive exam question needs ~35 substantive words of lecture content.
+    words = [w for w in re.findall(r'\b[a-zA-Z0-9_\u0900-\u097F]+\b', transcript_text) if len(w) > 2]
+    max_concept_capacity = max(3, len(words) // 35)
+    adjusted_target = min(target_total, max_concept_capacity)
+
     # Batching strategy
     max_per_call = 15
-    num_batches = math.ceil(target_total / max_per_call)
+    num_batches = math.ceil(adjusted_target / max_per_call)
     num_batches = max(1, min(20, num_batches))
 
-    questions_per_batch = math.ceil(target_total / num_batches)
+    questions_per_batch = math.ceil(adjusted_target / num_batches)
 
-    # Chunk the transcript lines evenly across batches
+    # Chunk the cleaned transcript lines evenly across batches
     chunk_size = math.ceil(len(lines) / num_batches)
     chunks = []
     for i in range(num_batches):
@@ -296,18 +390,24 @@ def generate_mcq_quiz(
         if q_list:
             all_raw_questions.extend(q_list)
 
-    # Normalize, deduplicate, and fact-check all questions
+    # Normalize, deduplicate by token similarity, and fact-check all questions
     final_questions = []
-    seen_questions = set()
+    seen_exact_questions = set()
 
     for item in all_raw_questions:
         norm = normalize_mcq(item, default_id=len(final_questions) + 1)
         if norm:
             q_clean = norm["question"].lower().strip()
-            if q_clean not in seen_questions:
-                seen_questions.add(q_clean)
-                norm["id"] = len(final_questions) + 1
-                final_questions.append(norm)
+            # 1. Exact string deduplication
+            if q_clean in seen_exact_questions:
+                continue
+            # 2. Semantic token overlap deduplication (prevents rephrased identical questions)
+            if is_duplicate_question(norm, final_questions):
+                continue
+
+            seen_exact_questions.add(q_clean)
+            norm["id"] = len(final_questions) + 1
+            final_questions.append(norm)
 
         if len(final_questions) >= target_total:
             break

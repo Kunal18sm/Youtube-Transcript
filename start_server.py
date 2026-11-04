@@ -16,7 +16,7 @@ import uvicorn
 
 if __name__ == "__main__":
     try:
-        uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+        uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False, log_level="info")
     except Exception as e:
         log_file.write(f"Error starting server: {e}\n")
         log_file.flush()

@@ -114,6 +114,19 @@ const globalLangLabel = document.getElementById('global-lang-label');
 const shareQuizCodeBtn = document.getElementById('share-quiz-code-btn');
 const emptyImportCodeBtn = document.getElementById('empty-import-code-btn');
 
+// Quiz Arena View Mode DOM (1-by-1 Focus Mode vs All Questions)
+const viewModeSingleBtn = document.getElementById('view-mode-single-btn');
+const viewModeAllBtn = document.getElementById('view-mode-all-btn');
+const quizJumpNavContainer = document.getElementById('quiz-jump-nav-container');
+const quizJumpPills = document.getElementById('quiz-jump-pills');
+const quizSingleNavContainer = document.getElementById('quiz-single-nav-container');
+const quizPrevQBtn = document.getElementById('quiz-prev-q-btn');
+const quizNextQBtn = document.getElementById('quiz-next-q-btn');
+const quizSingleIndicator = document.getElementById('quiz-single-indicator');
+
+let currentQuizViewMode = localStorage.getItem('quiz_view_mode') || 'single';
+let currentQuestionIndex = 0;
+
 // Export Code Modal DOM
 const exportCodeModal = document.getElementById('export-code-modal');
 const exportCodeTextarea = document.getElementById('export-code-textarea');
@@ -422,6 +435,54 @@ function setupEventListeners() {
   if (emptyImportCodeBtn) {
     emptyImportCodeBtn.addEventListener('click', openImportCodeModal);
   }
+
+  // Quiz Arena View Mode Controls (1-by-1 Focus Mode vs All Questions)
+  if (viewModeSingleBtn) {
+    viewModeSingleBtn.addEventListener('click', () => setQuizViewMode('single'));
+  }
+  if (viewModeAllBtn) {
+    viewModeAllBtn.addEventListener('click', () => setQuizViewMode('all'));
+  }
+  if (quizPrevQBtn) {
+    quizPrevQBtn.addEventListener('click', () => {
+      if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        updateQuizViewDisplay();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }
+  if (quizNextQBtn) {
+    quizNextQBtn.addEventListener('click', () => {
+      if (currentQuizData && currentQuestionIndex < currentQuizData.questions.length - 1) {
+        currentQuestionIndex++;
+        updateQuizViewDisplay();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }
+
+  // Keyboard navigation for 1-by-1 Focus Mode (Left / Right Arrow Keys)
+  document.addEventListener('keydown', (e) => {
+    if (activePage !== 'quiz' || currentQuizViewMode !== 'single' || !currentQuizData) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+    if (e.key === 'ArrowLeft' && currentQuestionIndex > 0) {
+      currentQuestionIndex--;
+      updateQuizViewDisplay();
+    } else if (e.key === 'ArrowRight' && currentQuestionIndex < currentQuizData.questions.length - 1) {
+      currentQuestionIndex++;
+      updateQuizViewDisplay();
+    }
+  });
+
+  // Global listener to close 3-dot kebab dropdown menus when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown-container')) {
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
+    }
+  });
 
   // Library Page: Add New Folder & File / Code Import
   createSectionBtn.addEventListener('click', handleCreateNewSection);
@@ -890,6 +951,7 @@ function resetCurrentQuiz() {
 
   quizUserAnswers = {};
   quizScore = { correct: 0, wrong: 0 };
+  currentQuestionIndex = 0;
   isGlobalHindi = false;
   globalLangLabel.textContent = 'All in Hindi';
   quizResultsCard.classList.add('hidden');
@@ -1040,6 +1102,113 @@ function renderQuizPlayer() {
       handleDeleteSingleQuestion(qid);
     });
   });
+
+  // Apply current View Mode (1-by-1 Focus Mode vs All Questions)
+  updateQuizViewDisplay();
+}
+
+function setQuizViewMode(mode) {
+  currentQuizViewMode = mode;
+  localStorage.setItem('quiz_view_mode', mode);
+  updateQuizViewDisplay();
+}
+
+function updateQuizViewDisplay() {
+  if (!currentQuizData || !currentQuizData.questions || currentQuizData.questions.length === 0) {
+    if (quizJumpNavContainer) quizJumpNavContainer.classList.add('hidden');
+    if (quizSingleNavContainer) quizSingleNavContainer.classList.add('hidden');
+    return;
+  }
+
+  const total = currentQuizData.questions.length;
+  if (currentQuestionIndex >= total) {
+    currentQuestionIndex = Math.max(0, total - 1);
+  }
+
+  // Update mode toggle buttons
+  if (viewModeSingleBtn && viewModeAllBtn) {
+    if (currentQuizViewMode === 'single') {
+      viewModeSingleBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-white bg-rose-600 shadow-sm';
+      viewModeAllBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-white hover:bg-surface-850';
+    } else {
+      viewModeAllBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-white bg-rose-600 shadow-sm';
+      viewModeSingleBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-white hover:bg-surface-850';
+    }
+  }
+
+  if (currentQuizViewMode === 'single') {
+    // Show navigator containers
+    if (quizJumpNavContainer) quizJumpNavContainer.classList.remove('hidden');
+    if (quizSingleNavContainer) quizSingleNavContainer.classList.remove('hidden');
+
+    // Show ONLY active question card
+    currentQuizData.questions.forEach((q, idx) => {
+      const qid = q.id || idx + 1;
+      const card = document.getElementById(`q-card-${qid}`);
+      if (card) {
+        card.style.display = (idx === currentQuestionIndex) ? 'block' : 'none';
+      }
+    });
+
+    // Render Jump Pills
+    if (quizJumpPills) {
+      quizJumpPills.innerHTML = '';
+      currentQuizData.questions.forEach((q, idx) => {
+        const qid = q.id || idx + 1;
+        const pill = document.createElement('button');
+        const isCurrent = (idx === currentQuestionIndex);
+        const answeredLetter = quizUserAnswers[qid];
+        const correctLetter = (q.correct_answer || '').trim().charAt(0).toUpperCase();
+
+        let baseClasses = 'shrink-0 min-w-8 h-8 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ';
+        if (isCurrent) {
+          baseClasses += 'ring-2 ring-rose-500 bg-rose-600 text-white shadow-md shadow-rose-600/30 ';
+        } else if (answeredLetter) {
+          if (answeredLetter === correctLetter) {
+            baseClasses += 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 ';
+          } else {
+            baseClasses += 'bg-rose-950/80 border border-rose-500/50 text-rose-400 ';
+          }
+        } else {
+          baseClasses += 'bg-surface-850 text-slate-400 hover:text-slate-200 hover:bg-surface-800 border border-surface-750 ';
+        }
+
+        pill.className = baseClasses;
+        pill.innerHTML = `<span>${idx + 1}</span>`;
+        pill.title = `Jump to Question ${idx + 1}`;
+        pill.addEventListener('click', () => {
+          currentQuestionIndex = idx;
+          updateQuizViewDisplay();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        quizJumpPills.appendChild(pill);
+      });
+    }
+
+    // Update bottom pagination indicator and buttons
+    if (quizSingleIndicator) {
+      quizSingleIndicator.textContent = `Question ${currentQuestionIndex + 1} of ${total}`;
+    }
+    if (quizPrevQBtn) {
+      quizPrevQBtn.disabled = (currentQuestionIndex === 0);
+    }
+    if (quizNextQBtn) {
+      quizNextQBtn.disabled = (currentQuestionIndex >= total - 1);
+    }
+
+  } else {
+    // All Questions Mode: Show all cards in scrollable view
+    if (quizJumpNavContainer) quizJumpNavContainer.classList.add('hidden');
+    if (quizSingleNavContainer) quizSingleNavContainer.classList.add('hidden');
+
+    currentQuizData.questions.forEach((q, idx) => {
+      const qid = q.id || idx + 1;
+      const card = document.getElementById(`q-card-${qid}`);
+      if (card) {
+        card.style.display = 'block';
+      }
+    });
+  }
 }
 
 function handleAnswerSelect(questionId, selectedLetter) {
@@ -1088,6 +1257,7 @@ function handleAnswerSelect(questionId, selectedLetter) {
   if (expBox) expBox.classList.remove('hidden');
 
   updateQuizScoreUI();
+  updateQuizViewDisplay();
 
   if (Object.keys(quizUserAnswers).length === currentQuizData.questions.length) {
     showQuizResults();
@@ -1134,6 +1304,9 @@ function handleDeleteSingleQuestion(questionId) {
     q.id = idx + 1;
   });
   currentQuizData.total_questions = currentQuizData.questions.length;
+  if (currentQuestionIndex >= currentQuizData.questions.length) {
+    currentQuestionIndex = Math.max(0, currentQuizData.questions.length - 1);
+  }
 
   // If this quiz was already in saved library, auto update in localStorage
   if (currentQuizData.storageId) {
@@ -1424,19 +1597,14 @@ function renderLibraryQuizzesGrid() {
 
   quizzes.forEach((quiz) => {
     const card = document.createElement('div');
-    card.className = 'p-5 rounded-3xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-xl flex flex-col justify-between gap-4';
-
-    const sectionName = quiz.section || 'General';
+    card.className = 'p-5 rounded-3xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-xl flex flex-col justify-between gap-4 relative';
 
     card.innerHTML = `
       <div>
-        <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-2.5">
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2 py-0.5 rounded-full text-[10px]">
+            <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2.5 py-0.5 rounded-full text-[10px]">
               ${quiz.total_questions} Concept MCQs
-            </span>
-            <span class="text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full text-[10px]">
-              <i class="fa-solid fa-folder text-[9px] mr-1"></i>${escapeHtml(sectionName)}
             </span>
           </div>
           <span class="text-[11px] text-slate-500">${quiz.savedAt}</span>
@@ -1446,10 +1614,6 @@ function renderLibraryQuizzesGrid() {
           <h4 class="font-bold text-white text-sm sm:text-base line-clamp-2 leading-snug flex-1" id="lib-title-${quiz.id}">
             ${escapeHtml(quiz.title)}
           </h4>
-          <!-- Title Edit / Customization Button -->
-          <button class="edit-quiz-btn p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" data-id="${quiz.id}" title="Rename quiz title or change folder">
-            <i class="fa-solid fa-pen-to-square text-xs"></i>
-          </button>
         </div>
 
         ${quiz.score ? `
@@ -1460,25 +1624,59 @@ function renderLibraryQuizzesGrid() {
       </div>
 
       <div class="flex items-center justify-between pt-3 border-t border-surface-800 gap-2">
-        <button class="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
-          <i class="fa-solid fa-play text-[9px]"></i> Start Practice Arena
+        <button class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
+          <i class="fa-solid fa-play text-[10px]"></i>
+          <span>Start Practice Arena</span>
         </button>
 
-        <button class="p-2 bg-surface-800 hover:bg-amber-950/40 text-amber-300 border border-surface-700 hover:border-amber-500/40 rounded-xl text-xs cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}" title="Copy full portable Quiz Code to share or use on any device">
-          <i class="fa-solid fa-key text-xs text-amber-400"></i>
-        </button>
+        <!-- 3-Dot Kebab Menu Container -->
+        <div class="relative dropdown-container">
+          <button class="w-9 h-9 rounded-xl bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700 flex items-center justify-center transition-all cursor-pointer card-menu-btn" data-id="${quiz.id}" title="Quiz Options">
+            <i class="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
 
-        <button class="p-2 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs cursor-pointer download-saved-btn" data-id="${quiz.id}" title="Download JSON">
-          <i class="fa-solid fa-download text-xs text-rose-400"></i>
-        </button>
-
-        <button class="p-2 bg-surface-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-surface-700 rounded-xl text-xs cursor-pointer delete-saved-btn" data-id="${quiz.id}" title="Delete">
-          <i class="fa-solid fa-trash-can text-xs"></i>
-        </button>
+          <!-- Floating Dropdown Menu -->
+          <div id="card-menu-dropdown-${quiz.id}" class="hidden card-menu-dropdown absolute right-0 bottom-full mb-2 w-48 bg-surface-950 border border-surface-750 rounded-2xl shadow-2xl p-1.5 z-30 space-y-0.5 backdrop-blur-xl">
+            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-key text-amber-400 w-4"></i>
+              <span>Copy Quiz Code</span>
+            </button>
+            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer edit-quiz-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-pen-to-square text-rose-400 w-4"></i>
+              <span>Rename / Folder</span>
+            </button>
+            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer download-worksheet-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-file-lines text-cyan-400 w-4"></i>
+              <span>Worksheet (Text)</span>
+            </button>
+            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer download-saved-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-code text-indigo-400 w-4"></i>
+              <span>Download JSON</span>
+            </button>
+            <div class="h-px bg-surface-800 my-1"></div>
+            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer delete-saved-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-trash-can text-red-400 w-4"></i>
+              <span>Delete Quiz</span>
+            </button>
+          </div>
+        </div>
       </div>
     `;
 
     libraryQuizzesGrid.appendChild(card);
+  });
+
+  // Attach 3-dot dropdown menu toggles
+  document.querySelectorAll('.card-menu-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menu = document.getElementById(`card-menu-dropdown-${btn.dataset.id}`);
+      const isCurrentlyOpen = menu && !menu.classList.contains('hidden');
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
+      if (menu && !isCurrentlyOpen) {
+        menu.classList.remove('hidden');
+      }
+    });
   });
 
   // Attach actions
@@ -1487,25 +1685,46 @@ function renderLibraryQuizzesGrid() {
   });
 
   document.querySelectorAll('.copy-quiz-code-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
       const q = getSavedQuizzes().find(item => item.id === btn.dataset.id);
       if (q) openQuizCodeModal(q);
     });
   });
 
   document.querySelectorAll('.edit-quiz-btn').forEach(btn => {
-    btn.addEventListener('click', () => openEditQuizModal({ type: 'library', quizId: btn.dataset.id }));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
+      openEditQuizModal({ type: 'library', quizId: btn.dataset.id });
+    });
+  });
+
+  document.querySelectorAll('.download-worksheet-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
+      const q = getSavedQuizzes().find(item => item.id === btn.dataset.id);
+      if (q) downloadQuizWorksheet(q);
+    });
   });
 
   document.querySelectorAll('.download-saved-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
       const q = getSavedQuizzes().find(item => item.id === btn.dataset.id);
       if (q) downloadBlob(JSON.stringify(q, null, 2), `${sanitizeFilename(q.title)}_quiz.json`, 'application/json');
     });
   });
 
   document.querySelectorAll('.delete-saved-btn').forEach(btn => {
-    btn.addEventListener('click', () => deleteSavedQuiz(btn.dataset.id));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.add('hidden'));
+      deleteSavedQuiz(btn.dataset.id);
+    });
   });
 }
 
@@ -1984,24 +2203,34 @@ function downloadQuizAsJson() {
   downloadBlob(JSON.stringify(currentQuizData, null, 2), `${sanitizeFilename(currentQuizData.title)}_quiz.json`, 'application/json');
 }
 
-function downloadQuizAsPrintableText() {
-  if (!currentQuizData) return;
+function downloadQuizWorksheet(quizObj) {
+  if (!quizObj || !quizObj.questions) return;
 
-  let text = `QUIZ: ${currentQuizData.title}\n`;
-  text += `Folder: ${currentQuizData.section || 'General'} | Total Questions: ${currentQuizData.questions.length}\n\n`;
+  let text = `QUIZ: ${quizObj.title}\n`;
+  text += `Folder: ${quizObj.section || 'General'} | Total Questions: ${quizObj.questions.length}\n\n`;
 
-  currentQuizData.questions.forEach((q, idx) => {
+  quizObj.questions.forEach((q, idx) => {
     text += `Q${idx + 1}. [${q.timestamp || '00:00'}] ${q.question}\n`;
-    q.options.forEach(opt => text += `   ${opt}\n`);
+    if (q.options) {
+      q.options.forEach(opt => text += `   ${opt}\n`);
+    }
     text += `\n`;
   });
 
   text += `\n--- ANSWER KEY & EXPLANATIONS ---\n\n`;
-  currentQuizData.questions.forEach((q, idx) => {
-    text += `Q${idx + 1}: ${q.correct_answer} (At ${q.timestamp}) - ${q.explanation}\n`;
+  quizObj.questions.forEach((q, idx) => {
+    text += `Q${idx + 1}: ${q.correct_answer} (At ${q.timestamp || '00:00'}) - ${q.explanation || ''}\n`;
+    if (q.verified_fact) {
+      text += `    [Evidence]: ${q.verified_fact}\n`;
+    }
   });
 
-  downloadBlob(text, `${sanitizeFilename(currentQuizData.title)}_worksheet.txt`, 'text/plain');
+  downloadBlob(text, `${sanitizeFilename(quizObj.title)}_worksheet.txt`, 'text/plain');
+}
+
+function downloadQuizAsPrintableText() {
+  if (!currentQuizData) return;
+  downloadQuizWorksheet(currentQuizData);
 }
 
 function downloadBlob(content, filename, mimeType) {

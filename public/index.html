@@ -75,14 +75,10 @@
         <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-rose-600 flex items-center justify-center shadow-lg shadow-rose-600/20 ring-1 ring-white/10 shrink-0">
           <i class="fa-brands fa-youtube text-lg sm:text-xl text-white"></i>
         </div>
-        <div class="flex items-center gap-2">
+        <div>
           <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white">
             YT Transcript <span class="text-rose-500">Pro</span>
           </h1>
-          <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-800 text-slate-300 border border-surface-700/80">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-            Local Fast
-          </span>
         </div>
       </div>
 
@@ -506,6 +502,18 @@
             <!-- Quiz Arena Action Buttons -->
             <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
               
+              <!-- View Mode Toggle: 1-by-1 Focus vs All Questions -->
+              <div class="inline-flex items-center p-0.5 bg-surface-950 border border-surface-800 rounded-xl" title="Switch between 1 question per page or all questions scrollable">
+                <button id="view-mode-single-btn" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-white bg-rose-600 shadow-sm">
+                  <i class="fa-solid fa-square-check text-xs"></i>
+                  <span>1-by-1 Focus</span>
+                </button>
+                <button id="view-mode-all-btn" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-white">
+                  <i class="fa-solid fa-list-ol text-xs"></i>
+                  <span>All Questions</span>
+                </button>
+              </div>
+
               <!-- 1-Click Copy Full Quiz Code (Share with other devices) -->
               <button id="share-quiz-code-btn" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-surface-800 hover:from-amber-500/30 hover:to-surface-750 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-sm transition-all" title="Get full lengthy code to copy or use on another device">
                 <i class="fa-solid fa-key text-xs text-amber-400"></i>
@@ -538,9 +546,42 @@
             </div>
           </div>
 
+          <!-- Question Jump Pills Navigation (1-by-1 Focus Mode) -->
+          <div id="quiz-jump-nav-container" class="hidden bg-surface-900 border border-surface-800 rounded-2xl p-3 shadow-lg">
+            <div class="flex items-center justify-between text-xs text-slate-400 mb-2 px-1">
+              <span class="font-bold text-slate-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-compass text-rose-500"></i>
+                <span>Question Navigator</span>
+              </span>
+              <span id="quiz-jump-mode-hint" class="text-[11px] text-slate-500">Click any number to jump directly</span>
+            </div>
+            <div id="quiz-jump-pills" class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+              <!-- Dynamically populated question numbers: [1] [2] ... [N] -->
+            </div>
+          </div>
+
           <!-- Questions List -->
           <div id="quiz-questions-list" class="space-y-4">
             <!-- Dynamic interactive cards with delete buttons -->
+          </div>
+
+          <!-- Question Pagination Controls (1-by-1 Focus Mode) -->
+          <div id="quiz-single-nav-container" class="hidden bg-surface-900 border border-surface-800 rounded-2xl p-3 sm:p-4 shadow-xl flex items-center justify-between gap-3">
+            <button id="quiz-prev-q-btn" class="px-4 py-2 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+              <i class="fa-solid fa-arrow-left text-xs"></i>
+              <span>Previous</span>
+            </button>
+
+            <div class="text-center font-mono">
+              <span id="quiz-single-indicator" class="text-xs sm:text-sm font-bold text-white bg-surface-950 px-3 py-1 rounded-lg border border-surface-800">
+                Question 1 of 1
+              </span>
+            </div>
+
+            <button id="quiz-next-q-btn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+              <span>Next</span>
+              <i class="fa-solid fa-arrow-right text-xs"></i>
+            </button>
           </div>
 
           <!-- Quiz Completion Banner -->
