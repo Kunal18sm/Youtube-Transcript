@@ -656,32 +656,112 @@ class TranslateRequest(BaseModel):
     explanation: Optional[str] = None
     target_lang: str = "hi"
 
-def translate_str(text: str, target: str = "hi") -> str:
-    if not text:
+class BatchTranslateRequest(BaseModel):
+    questions: List[Dict[str, Any]]
+    target_lang: str = "hi"
+
+def translate_str(text: str, target: str = "hi", source: str = "en") -> str:
+    if not text or not str(text).strip():
         return ""
     import urllib.parse
-    url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target}&dt=t&q={urllib.parse.quote(text)}"
+    clean_text = str(text).strip()
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    # 1. Google Translate GTX (try source 'en' first for English-to-Hindi, then 'auto')
+    sources_to_try = [source, "auto"] if source else ["auto"]
+    for s in sources_to_try:
+        try:
+            url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={s}&tl={target}&dt=t&q={urllib.parse.quote(clean_text)}"
+            r = requests.get(url, headers=headers, timeout=6)
+            if r.status_code == 200:
+                res = "".join([part[0] for part in r.json()[0] if part[0]])
+                if res and res.strip() and (res.strip() != clean_text or len(clean_text) < 4):
+                    return res
+        except Exception:
+            pass
+
+    # 2. Resilient Fallback to Gemini API if Google Translate is blocked or throttled
     try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            return "".join([part[0] for part in r.json()[0] if part[0]])
+        from quiz_generator import get_gemini_api_key
+        api_key = get_gemini_api_key()
+        if api_key:
+            prompt = f"Translate the following text accurately into Hindi (Devanagari script). Return ONLY the translated Hindi text without quotes or preamble:\n\n{clean_text}"
+            for model in ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]:
+                u = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                p = {"contents": [{"parts": [{"text": prompt}]}]}
+                res = requests.post(u, json=p, timeout=7)
+                if res.status_code == 200:
+                    cand = res.json().get("candidates", [])
+                    if cand:
+                        return cand[0]["content"]["parts"][0]["text"].strip()
     except Exception:
         pass
-    return text
+
+    return clean_text
+
+def translate_mcq(question_text: str, options: List[str], explanation: str = "", target_lang: str = "hi") -> Dict[str, Any]:
+    """Translate an MCQ with clean letter prefix preservation in 1 single HTTP call."""
+    clean_opts = [re.sub(r'^[A-Da-d\u0915-\u0928\u090f\u092c\u0938\u0921][\)\.\:\-]\s*', '', str(opt)).strip() for opt in (options or [])]
+    letters = ["A", "B", "C", "D"]
+
+    delimiter = " ||| "
+    parts_to_translate = [question_text] + clean_opts + [explanation or ""]
+    combined_text = delimiter.join(parts_to_translate)
+
+    translated_combined = translate_str(combined_text, target_lang)
+
+    if delimiter.strip() in translated_combined:
+        split_parts = [p.strip() for p in translated_combined.split(delimiter.strip())]
+        if len(split_parts) >= 1 + len(clean_opts):
+            trans_q = split_parts[0]
+            trans_opts = [f"{letters[i]}) {split_parts[i+1]}" for i in range(min(len(letters), len(clean_opts)))]
+            trans_exp = split_parts[1 + len(clean_opts)] if len(split_parts) > 1 + len(clean_opts) else ""
+            return {
+                "question": trans_q,
+                "options": trans_opts,
+                "explanation": trans_exp
+            }
+
+    # Fallback to individual translating if delimiter got merged
+    trans_q = translate_str(question_text, target_lang)
+    trans_opts = [f"{letters[i]}) {translate_str(clean_opts[i], target_lang)}" for i in range(len(clean_opts))]
+    trans_exp = translate_str(explanation or "", target_lang)
+    return {
+        "question": trans_q,
+        "options": trans_opts,
+        "explanation": trans_exp
+    }
 
 @app.post("/api/translate")
 @app.post("/translate")
 def translate_endpoint(req: TranslateRequest):
     if req.question:
-        trans_q = translate_str(req.question, req.target_lang)
-        trans_opts = [translate_str(opt, req.target_lang) for opt in (req.options or [])]
-        trans_exp = translate_str(req.explanation or "", req.target_lang)
-        return {
-            "question": trans_q,
-            "options": trans_opts,
-            "explanation": trans_exp
-        }
+        return translate_mcq(req.question, req.options or [], req.explanation or "", req.target_lang)
     return {"translated_text": translate_str(req.text or "", req.target_lang)}
+
+@app.post("/api/translate/batch")
+@app.post("/translate/batch")
+def batch_translate_endpoint(req: BatchTranslateRequest):
+    results = {}
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    workers = min(6, max(1, len(req.questions)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_item = {
+            executor.submit(
+                translate_mcq,
+                item.get("question", ""),
+                item.get("options", []),
+                item.get("explanation", ""),
+                req.target_lang
+            ): item.get("id") for item in req.questions
+        }
+        for future in as_completed(future_to_item):
+            qid = future_to_item[future]
+            try:
+                results[str(qid)] = future.result()
+            except Exception:
+                pass
+    return {"translations": results}
 
 # FastAPI Local Endpoints
 @app.get("/api/health")

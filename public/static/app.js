@@ -1587,7 +1587,7 @@ async function toggleQuestionLanguage(questionId) {
   if (question.hindi) {
     question.isHindi = !question.isHindi;
     updateQuestionCardDOM(question);
-    if (label) label.textContent = question.isHindi ? 'English' : 'Hindi';
+    if (label) label.textContent = question.isHindi ? 'English' : 'हिंदी';
     return;
   }
 
@@ -1613,11 +1613,13 @@ async function toggleQuestionLanguage(questionId) {
       updateQuestionCardDOM(question);
       if (label) label.textContent = 'English';
       showToast('Question translated to Hindi!', 'success');
+    } else {
+      throw new Error('Empty translation received');
     }
   } catch (err) {
     console.error('Translation failed:', err);
-    showToast('Translation error', 'error');
-    if (label) label.textContent = 'Hindi';
+    showToast('Translation error: Could not connect to translation service.', 'error');
+    if (label) label.textContent = 'हिंदी';
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1641,7 +1643,8 @@ function updateQuestionCardDOM(q) {
     const btns = group.querySelectorAll('.quiz-option-btn');
     btns.forEach((btn, i) => {
       const opt = qOptions[i] || '';
-      const cleanOpt = opt.replace(/^[A-D]\)\s*/, '');
+      // Strip any letter prefixes (A, B, C, D, ए, बी, सी, डी, क, ख, ग, घ)
+      const cleanOpt = opt.replace(/^[A-Da-d\u0915-\u0928\u090f\u092c\u0938\u0921][\)\.\:\-]\s*|^\([A-Da-d\u0915-\u0928\u090f\u092c\u0938\u0921]\)\s*/, '');
       const span = btn.querySelector('span.flex-1');
       if (span) span.textContent = cleanOpt;
     });
@@ -1649,50 +1652,107 @@ function updateQuestionCardDOM(q) {
 }
 
 async function toggleAllQuestionsLanguage() {
-  if (!currentQuizData || !currentQuizData.questions) return;
+  if (!currentQuizData || !currentQuizData.questions || currentQuizData.questions.length === 0) return;
 
   isGlobalHindi = !isGlobalHindi;
   toggleAllHindiBtn.disabled = true;
-  globalLangLabel.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs mr-1"></i> Translating...';
-  showToast(isGlobalHindi ? 'Translating quiz to Hindi...' : 'Switched to English', 'success');
 
-  try {
+  if (!isGlobalHindi) {
+    // Switch all back to English immediately
     for (const q of currentQuizData.questions) {
-      if (isGlobalHindi) {
-        if (!q.hindi) {
-          try {
-            const res = await fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                question: q.question,
-                options: q.options,
-                explanation: q.explanation,
-                target_lang: 'hi'
-              })
-            });
-            const data = await res.json();
-            if (data.question) q.hindi = data;
-          } catch (e) {
-            continue;
-          }
-        }
-        q.isHindi = true;
-      } else {
-        q.isHindi = false;
-      }
+      q.isHindi = false;
       updateQuestionCardDOM(q);
-
       const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
       if (btn) {
         const label = btn.querySelector('.translate-q-label');
-        if (label) label.textContent = q.isHindi ? 'English' : 'Hindi';
+        if (label) label.textContent = 'हिंदी';
       }
     }
+    toggleAllHindiBtn.disabled = false;
+    globalLangLabel.textContent = 'All in Hindi';
+    showToast('Switched back to English', 'info');
+    return;
+  }
+
+  // Find questions needing translation
+  const needed = currentQuizData.questions.filter(q => !q.hindi);
+  if (needed.length === 0) {
+    for (const q of currentQuizData.questions) {
+      q.isHindi = true;
+      updateQuestionCardDOM(q);
+      const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
+      if (btn) {
+        const label = btn.querySelector('.translate-q-label');
+        if (label) label.textContent = 'English';
+      }
+    }
+    toggleAllHindiBtn.disabled = false;
+    globalLangLabel.textContent = 'View in English';
+    showToast('Switched to Hindi', 'success');
+    return;
+  }
+
+  globalLangLabel.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs mr-1"></i> Translating...';
+  showToast(`Translating ${needed.length} questions to Hindi...`, 'info');
+
+  try {
+    // Fast parallel batch translation in chunks of 10
+    const batchSize = 10;
+    for (let i = 0; i < needed.length; i += batchSize) {
+      const slice = needed.slice(i, i + batchSize);
+      try {
+        const res = await fetch('/api/translate/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            questions: slice.map(q => ({
+              id: q.id,
+              question: q.question,
+              options: q.options,
+              explanation: q.explanation
+            })),
+            target_lang: 'hi'
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const translations = data.translations || {};
+          for (const q of slice) {
+            if (translations[String(q.id)]) {
+              q.hindi = translations[String(q.id)];
+            }
+            q.isHindi = true;
+            updateQuestionCardDOM(q);
+            const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
+            if (btn) {
+              const label = btn.querySelector('.translate-q-label');
+              if (label) label.textContent = 'English';
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Batch translate failed for slice:', e);
+      }
+    }
+
+    // Apply isHindi = true across all questions
+    for (const q of currentQuizData.questions) {
+      q.isHindi = true;
+      updateQuestionCardDOM(q);
+      const btn = document.querySelector(`.translate-q-btn[data-qid="${q.id}"]`);
+      if (btn) {
+        const label = btn.querySelector('.translate-q-label');
+        if (label) label.textContent = 'English';
+      }
+    }
+
+    showToast('Quiz translated to Hindi successfully!', 'success');
   } finally {
     toggleAllHindiBtn.disabled = false;
-    globalLangLabel.textContent = isGlobalHindi ? 'View in English' : 'All in Hindi';
+    globalLangLabel.textContent = 'View in English';
   }
+}
 }
 
 // ----------------------------------------------------
