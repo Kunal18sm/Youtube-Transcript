@@ -1,16 +1,14 @@
 import sys
 import os
 
-log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.log")
-log_file = open(log_path, "a", encoding="utf-8")
-if sys.stdout is None:
-    sys.stdout = log_file
-if sys.stderr is None:
-    sys.stderr = log_file
-
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 sys.path.insert(0, script_dir)
+
+log_path = os.path.join(script_dir, "server.log")
+log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+sys.stdout = log_file
+sys.stderr = log_file
 
 import uvicorn
 

@@ -152,6 +152,16 @@ const createSectionBtn = document.getElementById('create-section-btn');
 const importQuizFile = document.getElementById('import-quiz-file');
 const importCodeModalBtn = document.getElementById('import-code-modal-btn');
 
+// Live Server Status DOM Elements
+const serverStatusPill = document.getElementById('server-status-pill');
+const serverStatusDot = document.getElementById('server-status-dot');
+const serverStatusText = document.getElementById('server-status-text');
+const serverOfflineBanner = document.getElementById('server-offline-banner');
+const recheckServerBtn = document.getElementById('recheck-server-btn');
+
+let isServerOnline = true;
+let healthCheckInterval = null;
+
 // Toast DOM
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
@@ -163,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateSectionDropdown();
   checkPreviousTranscript();
   setupNetworkListeners();
+  startServerHealthMonitor();
 });
 
 // ----------------------------------------------------
@@ -285,6 +296,90 @@ function setupNetworkListeners() {
   window.addEventListener('online', () => {
     showToast('Internet connected! You are back online.', 'success');
   });
+}
+
+// ----------------------------------------------------
+// LIVE BACKEND SERVER STATUS & HEALTH MONITOR (ONLINE / OFFLINE)
+// ----------------------------------------------------
+
+async function checkServerHealth(manual = false) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch('/api/health?_t=' + Date.now(), {
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      isServerOnline = true;
+      if (serverStatusPill) {
+        serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm';
+      }
+      if (serverStatusDot) {
+        serverStatusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+      }
+      if (serverStatusText) {
+        serverStatusText.textContent = 'Server: Online';
+      }
+      if (serverOfflineBanner) {
+        serverOfflineBanner.classList.add('hidden');
+      }
+      if (manual) {
+        showToast('🟢 Server is ONLINE and running on port 8000!', 'success');
+      }
+      return true;
+    } else {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } catch (err) {
+    isServerOnline = false;
+    if (serverStatusPill) {
+      serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer bg-rose-950/90 border-rose-500/60 text-rose-300 hover:bg-rose-900/80 shadow-md animate-pulse';
+    }
+    if (serverStatusDot) {
+      serverStatusDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+    }
+    if (serverStatusText) {
+      serverStatusText.textContent = 'Server: Offline';
+    }
+    if (serverOfflineBanner) {
+      serverOfflineBanner.classList.remove('hidden');
+    }
+    if (manual) {
+      showToast('🔴 Server is OFFLINE! Double-click Desktop status file to start.', 'error');
+    }
+    return false;
+  }
+}
+
+function startServerHealthMonitor() {
+  // Check immediately on load
+  checkServerHealth(false);
+
+  // Poll every 3 seconds to auto-detect when server turns on or off
+  if (healthCheckInterval) clearInterval(healthCheckInterval);
+  healthCheckInterval = setInterval(() => checkServerHealth(false), 3000);
+
+  // Manual click on status badge
+  if (serverStatusPill) {
+    serverStatusPill.addEventListener('click', () => {
+      if (serverStatusText) serverStatusText.textContent = 'Checking...';
+      checkServerHealth(true);
+    });
+  }
+
+  // Manual click on offline banner retry button
+  if (recheckServerBtn) {
+    recheckServerBtn.addEventListener('click', () => {
+      recheckServerBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs"></i> <span>Checking...</span>';
+      checkServerHealth(true).finally(() => {
+        recheckServerBtn.innerHTML = '<i class="fa-solid fa-rotate text-xs"></i> <span>Check Server Again</span>';
+      });
+    });
+  }
 }
 
 function setupEventListeners() {

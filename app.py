@@ -644,6 +644,15 @@ def translate_endpoint(req: TranslateRequest):
     return {"translated_text": translate_str(req.text or "", req.target_lang)}
 
 # FastAPI Local Endpoints
+@app.get("/api/health")
+@app.get("/api/status")
+def health_check():
+    return {
+        "status": "online",
+        "message": "YT Transcript Pro Backend is ONLINE",
+        "port": 8000
+    }
+
 @app.get("/api/info")
 @app.get("/info")
 def get_video_info(url: str = Query(..., description="YouTube URL or Video ID")):
