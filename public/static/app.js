@@ -104,8 +104,10 @@ const quizQuestionsList = document.getElementById('quiz-questions-list');
 const quizResultsCard = document.getElementById('quiz-results-card');
 const quizFinalScoreText = document.getElementById('quiz-final-score-text');
 const finishRetakeBtn = document.getElementById('finish-retake-btn');
-const finishSaveBtn = document.getElementById('finish-save-btn');
-const saveQuizBtn = document.getElementById('save-quiz-btn');
+const finishLibraryBtn = document.getElementById('finish-library-btn');
+const quizAutosaveBadge = document.getElementById('quiz-autosave-badge');
+const quizAutosaveIcon = document.getElementById('quiz-autosave-icon');
+const quizAutosaveLabel = document.getElementById('quiz-autosave-label');
 const downloadQuizJsonBtn = document.getElementById('download-quiz-json-btn');
 const downloadQuizTextBtn = document.getElementById('download-quiz-text-btn');
 const retakeQuizBtn = document.getElementById('retake-quiz-btn');
@@ -182,6 +184,7 @@ const librarySectionPills = document.getElementById('library-section-pills');
 const createSectionBtn = document.getElementById('create-section-btn');
 const importQuizFile = document.getElementById('import-quiz-file');
 const importCodeModalBtn = document.getElementById('import-code-modal-btn');
+const librarySyncBtn = document.getElementById('library-sync-btn');
 
 // Live Server Status Dot DOM Elements
 const serverStatusPill = document.getElementById('server-status-pill');
@@ -556,8 +559,9 @@ function setupEventListeners() {
   generateQuizBtn.addEventListener('click', handleGenerateQuiz);
   retakeQuizBtn.addEventListener('click', resetCurrentQuiz);
   finishRetakeBtn.addEventListener('click', resetCurrentQuiz);
-  saveQuizBtn.addEventListener('click', saveCurrentQuizLocally);
-  finishSaveBtn.addEventListener('click', saveCurrentQuizLocally);
+  if (finishLibraryBtn) {
+    finishLibraryBtn.addEventListener('click', () => switchPage('library'));
+  }
   downloadQuizJsonBtn.addEventListener('click', downloadQuizAsJson);
   downloadQuizTextBtn.addEventListener('click', downloadQuizAsPrintableText);
   toggleAllHindiBtn.addEventListener('click', toggleAllQuestionsLanguage);
@@ -621,6 +625,9 @@ function setupEventListeners() {
   importQuizFile.addEventListener('change', handleImportQuizFile);
   if (importCodeModalBtn) {
     importCodeModalBtn.addEventListener('click', openImportCodeModal);
+  }
+  if (librarySyncBtn) {
+    librarySyncBtn.addEventListener('click', () => syncQuizzesWithCloud(false));
   }
 
   // 6-Digit Share Modal Listeners
@@ -896,6 +903,9 @@ function switchPage(pageKey) {
     navLibraryBtn.classList.remove('text-slate-400');
     renderLibrarySections();
     renderLibraryQuizzesGrid();
+    if (currentUser && currentUser.username) {
+      syncQuizzesWithCloud(true);
+    }
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1150,7 +1160,8 @@ async function handleGenerateQuiz() {
     activeQuizBadge.classList.remove('hidden');
     switchPage('quiz');
     resetCurrentQuiz();
-    showToast(`Generated & Fact-Checked ${quizData.total_questions} pure concept MCQs!`, 'success');
+    await autoSaveQuiz(currentQuizData, { section: chosenSection, title: currentQuizData.title });
+    showToast(`✨ Generated ${quizData.total_questions} pure concept MCQs & Auto-Saved!`, 'success');
   } catch (err) {
     progressTracker.stop();
     showToast(`Error: ${err.message}`, 'error');
@@ -1178,6 +1189,11 @@ function resetCurrentQuiz() {
   }
 
   updateQuizScoreUI();
+  if (currentQuizData.code) {
+    updateAutoSaveUI(currentUser ? 'saved_cloud' : 'saved_local', currentQuizData.code);
+  } else {
+    updateAutoSaveUI('saved_local');
+  }
   renderQuizPlayer();
 
   const emptyCard = document.getElementById('quiz-empty-card');
@@ -1497,6 +1513,9 @@ function showQuizResults() {
   quizResultsCard.classList.remove('hidden');
   quizResultsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   showToast(`Quiz completed: ${percent}%!`, 'success');
+
+  // Auto-save completion score to local storage & cloud
+  autoSaveQuiz(currentQuizData, { score: `${quizScore.correct}/${total}` });
 }
 
 // ----------------------------------------------------
@@ -2115,33 +2134,36 @@ function saveQuizCustomizationFromModal() {
   closeEditQuizModal();
 }
 
-async function saveCurrentQuizLocally() {
-  if (!currentQuizData) {
-    showToast('No active quiz to save!', 'error');
-    return;
-  }
+async function autoSaveQuiz(quizData, options = {}) {
+  if (!quizData) return;
 
-  const savedList = getSavedQuizzes();
-  const storageId = currentQuizData.storageId || ('quiz_' + Date.now());
+  const storageId = quizData.storageId || quizData.id || ('quiz_' + Date.now());
+  const chosenSection = options.section || quizData.section || (quizSectionSelect ? quizSectionSelect.value : 'General');
+  const chosenTitle = options.title || quizData.title || currentData?.title || 'Video Quiz';
 
   const quizRecord = {
     id: storageId,
-    video_id: currentVideoId || currentQuizData.video_id || '',
-    title: currentQuizData.title || currentData?.title || 'Video Quiz',
-    section: currentQuizData.section || (quizSectionSelect ? quizSectionSelect.value : 'General'),
-    total_questions: currentQuizData.questions.length,
-    questions: currentQuizData.questions,
-    savedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    score: quizScore.correct > 0 ? `${quizScore.correct}/${currentQuizData.questions.length}` : null,
-    code: currentQuizData.code || currentQuizData.share_code || null
+    video_id: currentVideoId || quizData.video_id || '',
+    title: chosenTitle,
+    section: chosenSection,
+    total_questions: quizData.questions ? quizData.questions.length : 0,
+    questions: quizData.questions || [],
+    savedAt: quizData.savedAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    score: options.score || quizData.score || (quizScore.correct > 0 ? `${quizScore.correct}/${quizData.questions.length}` : null),
+    code: quizData.code || quizData.share_code || null
   };
 
-  currentQuizData.storageId = storageId;
+  quizData.id = storageId;
+  quizData.storageId = storageId;
+  quizData.section = chosenSection;
+  quizData.title = chosenTitle;
+  if (quizRecord.score) quizData.score = quizRecord.score;
 
-  // Replace if already exists, else unshift
-  const existingIndex = savedList.findIndex(s => s.id === storageId);
+  // 1. Instant Offline Storage (saved in browser memory for 100% offline access)
+  const savedList = getSavedQuizzes();
+  const existingIndex = savedList.findIndex(s => s.id === storageId || (quizRecord.code && s.code === quizRecord.code));
   if (existingIndex !== -1) {
-    savedList[existingIndex] = quizRecord;
+    savedList[existingIndex] = { ...savedList[existingIndex], ...quizRecord };
   } else {
     savedList.unshift(quizRecord);
   }
@@ -2151,8 +2173,11 @@ async function saveCurrentQuizLocally() {
   renderLibrarySections();
   renderLibraryQuizzesGrid();
 
-  // If user is logged in, automatically save/sync to MongoDB!
+  updateAutoSaveUI('saved_local', quizRecord.code);
+
+  // 2. Instant Cloud Sync (MongoDB) if logged in
   if (currentUser && currentUser.username) {
+    updateAutoSaveUI('saving_cloud');
     try {
       const res = await fetch('/api/quiz/save', {
         method: 'POST',
@@ -2165,19 +2190,73 @@ async function saveCurrentQuizLocally() {
       if (res.ok) {
         const data = await res.json();
         quizRecord.code = data.code;
-        currentQuizData.code = data.code;
-        localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+        quizData.code = data.code;
+        quizData.share_code = data.code;
+
+        // Persist code back into local cache
+        const idx = savedList.findIndex(s => s.id === storageId);
+        if (idx !== -1) {
+          savedList[idx].code = data.code;
+          savedList[idx].share_code = data.code;
+          localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+        }
+
         renderLibraryQuizzesGrid();
         updateCloudCount();
-        showToast(`🎉 Saved to Cloud ID "${currentUser.username}" (Code: ${data.code})!`, 'success');
+        updateAutoSaveUI('saved_cloud', data.code);
         return;
       }
     } catch (e) {
-      console.warn('Could not sync to cloud:', e);
+      console.warn('[AutoSave] Cloud sync offline, cached locally:', e);
+      updateAutoSaveUI('saved_offline');
+    }
+  } else {
+    // Generate share code in background for anonymous users
+    if (!quizRecord.code) {
+      fetch('/api/quiz/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quizRecord)
+      }).then(r => r.json()).then(data => {
+        if (data && data.code) {
+          quizRecord.code = data.code;
+          quizData.code = data.code;
+          quizData.share_code = data.code;
+          const idx = savedList.findIndex(s => s.id === storageId);
+          if (idx !== -1) {
+            savedList[idx].code = data.code;
+            savedList[idx].share_code = data.code;
+            localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+            renderLibraryQuizzesGrid();
+          }
+          updateAutoSaveUI('saved_cloud', data.code);
+        }
+      }).catch(() => {});
     }
   }
+}
 
-  showToast('Quiz saved to your Library! Access anytime.', 'success');
+function updateAutoSaveUI(state, code = null) {
+  if (!quizAutosaveLabel || !quizAutosaveIcon) return;
+  if (state === 'saving_cloud') {
+    quizAutosaveIcon.className = 'fa-solid fa-spinner animate-spin text-[11px] text-amber-400';
+    quizAutosaveLabel.textContent = 'Saving...';
+  } else if (state === 'saved_cloud') {
+    quizAutosaveIcon.className = 'fa-solid fa-cloud-check text-[11px] text-emerald-400';
+    quizAutosaveLabel.textContent = code ? `Saved · PIN ${code}` : 'Cloud Saved';
+  } else if (state === 'saved_offline') {
+    quizAutosaveIcon.className = 'fa-solid fa-hard-drive text-[11px] text-amber-400';
+    quizAutosaveLabel.textContent = 'Saved Offline';
+  } else {
+    quizAutosaveIcon.className = 'fa-solid fa-circle-check text-[11px] text-emerald-400';
+    quizAutosaveLabel.textContent = code ? `Saved · PIN ${code}` : 'Auto-Saved';
+  }
+}
+
+async function saveCurrentQuizLocally() {
+  if (!currentQuizData) return;
+  await autoSaveQuiz(currentQuizData);
+  showToast('Quiz auto-saved to library & offline storage!', 'success');
 }
 
 function getSavedQuizzes() {
@@ -2216,6 +2295,12 @@ function loadSavedQuiz(quizId) {
 
 function deleteSavedQuiz(quizId) {
   if (!confirm('Are you sure you want to delete this saved quiz?')) return;
+  const deletedIds = JSON.parse(localStorage.getItem('yt_deleted_quizzes') || '[]');
+  if (!deletedIds.includes(quizId)) {
+    deletedIds.push(quizId);
+    localStorage.setItem('yt_deleted_quizzes', JSON.stringify(deletedIds));
+  }
+
   let quizzes = getSavedQuizzes().filter(q => q.id !== quizId);
   localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
   updateSavedQuizBadge();
@@ -2239,28 +2324,22 @@ function handleImportQuizFile(e) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = (event) => {
+  reader.onload = async (event) => {
     try {
       const imported = JSON.parse(event.target.result);
       if (!imported.questions || !Array.isArray(imported.questions)) throw new Error('Invalid format');
       
-      const storageId = 'quiz_' + Date.now();
+      const storageId = imported.id || ('quiz_' + Date.now());
       imported.id = storageId;
+      imported.storageId = storageId;
       imported.section = imported.section || 'General';
-      imported.savedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-      const list = getSavedQuizzes();
-      list.unshift(imported);
-      localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
 
       currentQuizData = imported;
-      currentQuizData.storageId = storageId;
       activeQuizBadge.classList.remove('hidden');
-
-      updateSavedQuizBadge();
       switchPage('quiz');
       resetCurrentQuiz();
-      showToast(`Imported ${imported.questions.length} questions from file!`, 'success');
+      await autoSaveQuiz(imported, { section: imported.section });
+      showToast(`🎉 Imported ${imported.questions.length} questions & Auto-Saved!`, 'success');
     } catch (err) {
       showToast('Could not load quiz JSON file.', 'error');
     }
@@ -2524,36 +2603,16 @@ async function handleExecuteImportCode() {
       throw new Error('Invalid quiz data received.');
     }
 
-    const storageId = quizData.id || quizData.storageId || ('quiz_' + Date.now());
-    quizData.id = storageId;
-    quizData.storageId = storageId;
-    quizData.section = chosenFolder;
-    quizData.savedAt = quizData.savedAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-    // Save into saved quizzes library
-    const list = getSavedQuizzes();
-    const existingIdx = list.findIndex(item => item.id === storageId || (quizData.code && item.code === quizData.code));
-    if (existingIdx !== -1) {
-      list[existingIdx] = quizData;
-    } else {
-      list.unshift(quizData);
-    }
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
-
-    // Load into active quiz arena
     currentQuizData = quizData;
     activeQuizBadge.classList.remove('hidden');
-    updateSavedQuizBadge();
     closeImportCodeModal();
 
     switchPage('quiz');
     resetCurrentQuiz();
-    renderLibrarySections();
-    renderLibraryQuizzesGrid();
+    await autoSaveQuiz(currentQuizData, { section: chosenFolder });
 
-    if (savedToCloud && currentUser) {
+    if (currentUser) {
       showToast(`🎉 Imported "${quizData.title}" into Cloud ID (${currentUser.username}) & Library!`, 'success');
-      updateCloudCount();
     } else {
       showToast(`🎉 Imported "${quizData.title}" (${quizData.questions.length} Qs) into "${chosenFolder}"!`, 'success');
     }
@@ -2882,12 +2941,17 @@ async function syncQuizzesWithCloud(silent = false) {
     const data = await res.json();
     const cloudQuizzes = data.quizzes || [];
 
+    const deletedIds = JSON.parse(localStorage.getItem('yt_deleted_quizzes') || '[]');
     const localQuizzes = getSavedQuizzes();
     let merged = [...localQuizzes];
     let newImported = 0;
 
-    // Merge cloud quizzes into local library
+    // 1. Merge cloud quizzes into local library (caches in localStorage for 100% offline access!)
     cloudQuizzes.forEach(cq => {
+      // Don't import if user deleted it locally
+      if (deletedIds.includes(cq.id) || (cq.code && deletedIds.includes(cq.code))) {
+        return;
+      }
       const idx = merged.findIndex(lq => lq.id === cq.id || (cq.code && lq.code === cq.code));
       if (idx !== -1) {
         merged[idx] = { ...merged[idx], ...cq };
@@ -2903,14 +2967,22 @@ async function syncQuizzesWithCloud(silent = false) {
     renderLibraryQuizzesGrid();
     updateCloudCount();
 
-    // Also upload any local quizzes that aren't yet in MongoDB
+    // 2. Also auto-upload any local quizzes that aren't yet in MongoDB
     for (const lq of localQuizzes) {
+      if (deletedIds.includes(lq.id) || (lq.code && deletedIds.includes(lq.code))) continue;
       const inCloud = cloudQuizzes.some(cq => cq.id === lq.id || (lq.code && cq.code === lq.code));
-      if (!inCloud) {
+      if (!inCloud && lq.questions && lq.questions.length > 0) {
         fetch('/api/quiz/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: currentUser.username, quiz: lq })
+        }).then(r => r.json()).then(savedRes => {
+          if (savedRes && savedRes.code) {
+            lq.code = savedRes.code;
+            lq.share_code = savedRes.code;
+            localStorage.setItem('yt_saved_quizzes', JSON.stringify(merged));
+            renderLibraryQuizzesGrid();
+          }
         }).catch(() => {});
       }
     }
@@ -2919,6 +2991,6 @@ async function syncQuizzesWithCloud(silent = false) {
       showToast(`☁️ Cloud Sync: ${cloudQuizzes.length} quizzes loaded for "${currentUser.username}"!`, 'success');
     }
   } catch (err) {
-    if (!silent) showToast('Could not sync with MongoDB Cloud.', 'error');
+    if (!silent) showToast('Could not sync with MongoDB Cloud. Offline quizzes available.', 'error');
   }
 }

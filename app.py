@@ -747,14 +747,17 @@ def get_mongo():
         _quiz_users_col = _mongo_db["quiz_users"]
         _quiz_quizzes_col = _mongo_db["quiz_quizzes"]
 
-        # Ensure performance indexes
-        try:
-            _quiz_users_col.create_index([("username", ASCENDING)], unique=True)
-            _quiz_quizzes_col.create_index([("code", ASCENDING)])
-            _quiz_quizzes_col.create_index([("username", ASCENDING)])
-            _quiz_quizzes_col.create_index([("id", ASCENDING), ("username", ASCENDING)], unique=True)
-        except Exception as idx_err:
-            print(f"[MongoDB] Index notice: {idx_err}")
+        # Ensure performance indexes gracefully
+        for col, idx, kwargs in [
+            (_quiz_users_col, [("username", ASCENDING)], {"unique": True}),
+            (_quiz_quizzes_col, [("code", ASCENDING)], {}),
+            (_quiz_quizzes_col, [("username", ASCENDING)], {}),
+            (_quiz_quizzes_col, [("id", ASCENDING), ("username", ASCENDING)], {})
+        ]:
+            try:
+                col.create_index(idx, **kwargs)
+            except Exception:
+                pass
 
         return _quiz_users_col, _quiz_quizzes_col
     except Exception as e:
@@ -1015,15 +1018,27 @@ def save_quiz_to_cloud(payload: QuizSavePayload):
         quiz_data["username"] = username
 
     saved_to_mongo = False
-    if quizzes_col is not None and username:
+    if quizzes_col is not None:
         try:
             doc_to_save = dict(quiz_data)
             doc_to_save.pop("_id", None)
-            quizzes_col.replace_one(
-                {"id": storage_id, "username": username},
-                doc_to_save,
-                upsert=True
-            )
+            
+            existing = None
+            if username:
+                if code and len(code) >= 4:
+                    existing = quizzes_col.find_one({"code": code, "username": username})
+                if not existing and storage_id:
+                    existing = quizzes_col.find_one({"id": storage_id, "username": username})
+            else:
+                if code and len(code) >= 4:
+                    existing = quizzes_col.find_one({"code": code})
+                if not existing and storage_id:
+                    existing = quizzes_col.find_one({"id": storage_id})
+
+            if existing:
+                quizzes_col.replace_one({"_id": existing["_id"]}, doc_to_save)
+            else:
+                quizzes_col.insert_one(doc_to_save)
             saved_to_mongo = True
         except Exception as e:
             print(f"[MongoDB] Save error: {e}")
@@ -1081,6 +1096,18 @@ def share_quiz_endpoint(quiz: Dict[str, Any]):
     quiz_data["code"] = code
     quiz_data["share_code"] = code
     quiz_data["shared_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Retain or set username if present
+    uname = sanitize_username(quiz_data.get("username")) if quiz_data.get("username") else None
+    if uname:
+        quiz_data["username"] = uname
+    elif quizzes_col is not None:
+        try:
+            prev = quizzes_col.find_one({"code": code}, {"username": 1})
+            if prev and prev.get("username"):
+                quiz_data["username"] = prev["username"]
+        except Exception:
+            pass
 
     # Save to MongoDB if available
     if quizzes_col is not None:

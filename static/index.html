@@ -566,10 +566,11 @@
                 <span id="global-lang-label">All in Hindi</span>
               </button>
 
-              <button id="save-quiz-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5">
-                <i class="fa-regular fa-bookmark text-rose-400"></i>
-                <span>Save</span>
-              </button>
+              <!-- Auto-Saved Cloud & Local Status Badge -->
+              <div id="quiz-autosave-badge" class="px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm" title="Auto-saved to Cloud & Offline Storage">
+                <i id="quiz-autosave-icon" class="fa-solid fa-cloud-arrow-up text-[11px] text-emerald-400"></i>
+                <span id="quiz-autosave-label">Auto-Saved</span>
+              </div>
 
               <button id="download-quiz-text-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5" title="Download Printable Worksheet">
                 <i class="fa-solid fa-download text-xs text-rose-400"></i>
@@ -635,8 +636,9 @@
               <button id="finish-retake-btn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer">
                 Retake
               </button>
-              <button id="finish-save-btn" class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-amber-300 border border-surface-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                Save to Library
+              <button id="finish-library-btn" class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-emerald-300 border border-surface-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5">
+                <i class="fa-solid fa-bookmark text-xs text-emerald-400"></i>
+                <span>View in Library</span>
               </button>
             </div>
           </div>
@@ -668,6 +670,11 @@
             <button id="create-section-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5">
               <i class="fa-solid fa-folder-plus text-amber-400"></i>
               <span>+ New Folder</span>
+            </button>
+
+            <button id="library-sync-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Sync quizzes with MongoDB Cloud">
+              <i class="fa-solid fa-arrows-rotate text-emerald-400 text-xs"></i>
+              <span>Sync Cloud</span>
             </button>
 
             <label class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5">
@@ -981,6 +988,6 @@
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/static/qrcode.min.js"></script>
-  <script src="/static/app.js?v=4.3.0"></script>
+  <script src="/static/app.js?v=4.4.0"></script>
 </body>
 </html>
