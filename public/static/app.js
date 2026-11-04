@@ -2370,9 +2370,12 @@ async function handlePushActiveQuizToMongo() {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to save to MongoDB');
+    if (!res.ok || !data.saved_to_mongo) {
+      throw new Error(data.detail || data.error || 'Server did not confirm MongoDB save');
+    }
 
     const code = data.code;
+    const dbTarget = data.database || 'yt_transcript';
     currentQuizData.code = code;
     currentQuizData.share_code = code;
     quizRecord.code = code;
@@ -2399,11 +2402,11 @@ async function handlePushActiveQuizToMongo() {
       await navigator.clipboard.writeText(code);
     } catch (_) {}
 
-    showToast(`🎉 Quiz saved to MongoDB! Code: [${code}] copied to clipboard!`, 'success');
+    showToast(`🎉 Quiz saved to MongoDB [DB: ${dbTarget}]! Code: [${code}] copied to clipboard!`, 'success');
     if (pushActiveQuizLabel) pushActiveQuizLabel.innerHTML = `<i class="fa-solid fa-check text-xs mr-1"></i> Code: ${code}`;
   } catch (err) {
     console.error('Push to MongoDB failed:', err);
-    showToast(`Error: ${err.message}`, 'error');
+    showToast(`❌ MongoDB Save Failed: ${err.message}`, 'error');
     if (pushActiveQuizLabel) pushActiveQuizLabel.textContent = 'Push to MongoDB';
   } finally {
     if (pushActiveQuizMongoBtn) pushActiveQuizMongoBtn.disabled = false;
@@ -2433,7 +2436,12 @@ async function handlePushAllQuizzesToMongo() {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Batch push failed');
+    if (!res.ok) {
+      throw new Error(data.detail || 'Batch push to MongoDB failed');
+    }
+    if (data.saved_count === 0 && data.total > 0) {
+      throw new Error(data.detail || (data.errors ? data.errors.join(', ') : 'No quizzes could be written to MongoDB.'));
+    }
 
     const results = data.results || {};
     let updatedCount = 0;
@@ -2453,10 +2461,11 @@ async function handlePushAllQuizzesToMongo() {
     updateSavedQuizBadge();
     updateCloudCount();
 
-    showToast(`🎉 Successfully pushed ${data.saved_count} quizzes to MongoDB! All codes are now live for sharing.`, 'success');
+    const dbTarget = data.database || 'yt_transcript';
+    showToast(`🎉 Successfully pushed ${data.saved_count} quizzes to MongoDB [DB: ${dbTarget}]! All codes are live.`, 'success');
   } catch (err) {
     console.error('Push all to MongoDB failed:', err);
-    showToast(`Error: ${err.message}`, 'error');
+    showToast(`❌ MongoDB Bulk Save Failed: ${err.message}`, 'error');
   } finally {
     if (pushAllQuizzesMongoBtn) pushAllQuizzesMongoBtn.disabled = false;
     if (pushAllQuizzesLabel) pushAllQuizzesLabel.textContent = 'Push All to MongoDB';
@@ -2481,7 +2490,9 @@ async function handlePushSingleQuizToMongo(quizId) {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to save to MongoDB');
+    if (!res.ok || !data.saved_to_mongo) {
+      throw new Error(data.detail || data.error || 'Server did not confirm MongoDB save');
+    }
 
     quiz.code = data.code;
     quiz.share_code = data.code;
@@ -2493,9 +2504,10 @@ async function handlePushSingleQuizToMongo(quizId) {
       await navigator.clipboard.writeText(data.code);
     } catch (_) {}
 
-    showToast(`🎉 "${quiz.title}" pushed to MongoDB! Access Code: [${data.code}] copied!`, 'success');
+    const dbTarget = data.database || 'yt_transcript';
+    showToast(`🎉 "${quiz.title}" pushed to MongoDB [DB: ${dbTarget}]! Code: [${data.code}] copied!`, 'success');
   } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
+    showToast(`❌ Push Failed: ${err.message}`, 'error');
   }
 }
 
