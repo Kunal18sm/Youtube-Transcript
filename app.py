@@ -3,6 +3,10 @@ import html
 import os
 import tempfile
 import glob
+import random
+import socket
+import time
+import json
 from typing import Optional, List, Dict, Any
 import requests
 import yt_dlp
@@ -692,6 +696,83 @@ def create_quiz(req: QuizRequest):
 
 # Serve frontend static files
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SHARED_QUIZZES_DIR = os.path.join(BASE_DIR, "data", "shared_quizzes")
+os.makedirs(SHARED_QUIZZES_DIR, exist_ok=True)
+
+def get_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+@app.post("/api/quiz/share")
+def share_quiz_endpoint(quiz: Dict[str, Any]):
+    if not quiz or not isinstance(quiz, dict):
+        raise HTTPException(status_code=400, detail="Invalid quiz data")
+
+    # Generate a clean 6-digit pin code
+    code = ""
+    for _ in range(15):
+        candidate = str(random.randint(100000, 999999))
+        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{candidate}.json")
+        if not os.path.exists(file_path):
+            code = candidate
+            break
+    if not code:
+        code = str(int(time.time()))[-6:]
+        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
+
+    quiz["share_code"] = code
+    quiz["shared_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(quiz, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save shared quiz: {e}")
+
+    lan_ip = get_lan_ip()
+    share_url = f"http://{lan_ip}:8000/?quiz={code}"
+    local_url = f"http://localhost:8000/?quiz={code}"
+
+    return {
+        "code": code,
+        "share_url": share_url,
+        "local_url": local_url,
+        "title": quiz.get("title", "Video Quiz"),
+        "total_questions": len(quiz.get("questions", []))
+    }
+
+@app.get("/api/quiz/shared/{code}")
+def get_shared_quiz_endpoint(code: str):
+    clean_code = re.sub(r'[^a-zA-Z0-9]', '', code).upper()
+    if clean_code.startswith("YT"):
+        clean_code = clean_code[2:]
+
+    file_path = os.path.join(SHARED_QUIZZES_DIR, f"{clean_code}.json")
+    if not os.path.exists(file_path):
+        matches = glob.glob(os.path.join(SHARED_QUIZZES_DIR, "*.json"))
+        matched_file = None
+        for m in matches:
+            base_name = os.path.splitext(os.path.basename(m))[0].upper()
+            if base_name == clean_code:
+                matched_file = m
+                break
+        if matched_file:
+            file_path = matched_file
+        else:
+            raise HTTPException(status_code=404, detail=f"Quiz code '{code}' not found or expired.")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read shared quiz: {e}")
 static_dir = os.path.join(BASE_DIR, "public", "static")
 if not os.path.exists(static_dir):
     static_dir = os.path.join(BASE_DIR, "static")

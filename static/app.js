@@ -127,18 +127,24 @@ const quizSingleIndicator = document.getElementById('quiz-single-indicator');
 let currentQuizViewMode = localStorage.getItem('quiz_view_mode') || 'single';
 let currentQuestionIndex = 0;
 
-// Export Code Modal DOM
+// Share Modal DOM (6-Digit PIN, QR Code & Direct Link)
 const exportCodeModal = document.getElementById('export-code-modal');
-const exportCodeTextarea = document.getElementById('export-code-textarea');
 const exportCodeQuizTitle = document.getElementById('export-code-quiz-title');
 const exportCodeBadge = document.getElementById('export-code-badge');
+const sharePinDisplay = document.getElementById('share-pin-display');
+const copySharePinBtn = document.getElementById('copy-share-pin-btn');
+const shareQrcodeBox = document.getElementById('share-qrcode-box');
+const shareLinkInput = document.getElementById('share-link-input');
+const copyShareLinkBtn = document.getElementById('copy-share-link-btn');
+const showRawCodeBtn = document.getElementById('show-raw-code-btn');
+const rawCodeContainer = document.getElementById('raw-code-container');
+const exportCodeTextarea = document.getElementById('export-code-textarea');
 const closeExportCodeModalBtn = document.getElementById('close-export-code-modal-btn');
 const closeExportCodeBtn = document.getElementById('close-export-code-btn');
-const copyExportCodeBtn = document.getElementById('copy-export-code-btn');
 
-// Import Code Modal DOM
+// Import Modal DOM (6-Digit PIN, Link or Code)
 const importCodeModal = document.getElementById('import-code-modal');
-const importCodeTextarea = document.getElementById('import-code-textarea');
+const importCodeInput = document.getElementById('import-code-input');
 const importCodeSectionSelect = document.getElementById('import-code-section-select');
 const importCodeAddSectionBtn = document.getElementById('import-code-add-section-btn');
 const closeImportCodeModalBtn = document.getElementById('close-import-code-modal-btn');
@@ -172,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
   checkPreviousTranscript();
   setupNetworkListeners();
   startServerHealthMonitor();
+  checkUrlSharedQuiz();
 });
 
 // ----------------------------------------------------
@@ -589,20 +596,51 @@ function setupEventListeners() {
     importCodeModalBtn.addEventListener('click', openImportCodeModal);
   }
 
-  // Portable Quiz Code Modals Listeners
+  // 6-Digit Share Modal Listeners
   if (closeExportCodeModalBtn) closeExportCodeModalBtn.addEventListener('click', closeQuizCodeModal);
   if (closeExportCodeBtn) closeExportCodeBtn.addEventListener('click', closeQuizCodeModal);
-  if (copyExportCodeBtn) copyExportCodeBtn.addEventListener('click', copyExportCodeText);
+  if (copySharePinBtn) {
+    copySharePinBtn.addEventListener('click', () => {
+      const pin = sharePinDisplay ? sharePinDisplay.textContent.trim() : '';
+      if (pin && pin !== '------') {
+        navigator.clipboard.writeText(pin);
+        showToast(`Short Code ${pin} copied!`, 'success');
+      }
+    });
+  }
+  if (copyShareLinkBtn) {
+    copyShareLinkBtn.addEventListener('click', () => {
+      const link = shareLinkInput ? shareLinkInput.value.trim() : '';
+      if (link) {
+        navigator.clipboard.writeText(link);
+        showToast('Direct Quiz Link copied!', 'success');
+      }
+    });
+  }
+  if (showRawCodeBtn) {
+    showRawCodeBtn.addEventListener('click', () => {
+      if (rawCodeContainer) rawCodeContainer.classList.toggle('hidden');
+    });
+  }
   if (exportCodeModal) {
     exportCodeModal.addEventListener('click', (e) => {
       if (e.target === exportCodeModal) closeQuizCodeModal();
     });
   }
 
+  // 6-Digit Import Modal Listeners
   if (closeImportCodeModalBtn) closeImportCodeModalBtn.addEventListener('click', closeImportCodeModal);
   if (cancelImportCodeBtn) cancelImportCodeBtn.addEventListener('click', closeImportCodeModal);
   if (submitImportCodeBtn) submitImportCodeBtn.addEventListener('click', handleExecuteImportCode);
   if (importCodeAddSectionBtn) importCodeAddSectionBtn.addEventListener('click', handleAddSectionFromImportModal);
+  if (importCodeInput) {
+    importCodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleExecuteImportCode();
+      }
+    });
+  }
   if (importCodeModal) {
     importCodeModal.addEventListener('click', (e) => {
       if (e.target === importCodeModal) closeImportCodeModal();
@@ -2142,35 +2180,69 @@ function decodeQuizFromCode(codeStr) {
   }
 }
 
-function openQuizCodeModal(quizData) {
+async function openQuizCodeModal(quizData) {
   if (!quizData) {
-    showToast('No quiz available to generate code!', 'error');
+    showToast('No quiz available to share!', 'error');
     return;
   }
-  const code = encodeQuizToCode(quizData);
-  if (!code) return;
 
   if (exportCodeQuizTitle) exportCodeQuizTitle.textContent = quizData.title || 'Video Quiz';
   if (exportCodeBadge) exportCodeBadge.textContent = `${quizData.questions ? quizData.questions.length : 0} Questions`;
-  if (exportCodeTextarea) exportCodeTextarea.value = code;
+  if (sharePinDisplay) sharePinDisplay.textContent = '...';
+  if (shareLinkInput) shareLinkInput.value = 'Generating share code...';
+  if (shareQrcodeBox) shareQrcodeBox.innerHTML = '<div class="w-32 h-32 flex items-center justify-center text-xs text-slate-400"><i class="fa-solid fa-spinner animate-spin mr-1"></i> Generating QR...</div>';
+  if (rawCodeContainer) rawCodeContainer.classList.add('hidden');
 
-  // Auto-copy to clipboard immediately
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(code).then(() => {
-      showToast('Quiz Code copied to clipboard! Share on any device.', 'success');
-    }).catch(() => {});
-  }
+  const rawCode = encodeQuizToCode(quizData);
+  if (exportCodeTextarea) exportCodeTextarea.value = rawCode;
 
   if (exportCodeModal) {
     exportCodeModal.classList.remove('hidden');
     exportCodeModal.classList.add('flex');
-    if (exportCodeTextarea) {
-      setTimeout(() => {
-        exportCodeTextarea.focus();
-        exportCodeTextarea.select();
-      }, 50);
-    }
   }
+
+  try {
+    const res = await fetch('/api/quiz/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quizData)
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (sharePinDisplay) sharePinDisplay.textContent = data.code;
+      if (shareLinkInput) shareLinkInput.value = data.share_url;
+
+      // Render crisp QR code using local qrcode.min.js
+      if (shareQrcodeBox) {
+        shareQrcodeBox.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+          new QRCode(shareQrcodeBox, {
+            text: data.share_url,
+            width: 140,
+            height: 140,
+            colorDark: '#07090e',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      }
+
+      // Auto-copy 6-digit code to clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(data.code).catch(() => {});
+      }
+      showToast(`Short Code: ${data.code} generated & copied!`, 'success');
+      return;
+    }
+  } catch (err) {
+    console.warn('Backend share offline, using text fallback:', err);
+  }
+
+  // Fallback if backend server unreachable
+  if (sharePinDisplay) sharePinDisplay.textContent = 'OFFLINE';
+  if (rawCodeContainer) rawCodeContainer.classList.remove('hidden');
+  showToast('Offline: Copy the text code below to share.', 'info');
 }
 
 function closeQuizCodeModal() {
@@ -2180,32 +2252,10 @@ function closeQuizCodeModal() {
   }
 }
 
-function copyExportCodeText() {
-  if (!exportCodeTextarea) return;
-  exportCodeTextarea.focus();
-  exportCodeTextarea.select();
-
-  const code = exportCodeTextarea.value;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(code).then(() => {
-      showToast('Quiz Code copied to clipboard!', 'success');
-      if (copyExportCodeBtn) {
-        const origHTML = copyExportCodeBtn.innerHTML;
-        copyExportCodeBtn.innerHTML = '<i class="fa-solid fa-check text-xs"></i> <span>Copied!</span>';
-        setTimeout(() => { copyExportCodeBtn.innerHTML = origHTML; }, 2000);
-      }
-    }).catch(() => {
-      document.execCommand('copy');
-      showToast('Quiz Code copied!', 'success');
-    });
-  } else {
-    document.execCommand('copy');
-    showToast('Quiz Code copied!', 'success');
+function openImportCodeModal(prefillCode = '') {
+  if (importCodeInput) {
+    importCodeInput.value = prefillCode;
   }
-}
-
-function openImportCodeModal() {
-  if (importCodeTextarea) importCodeTextarea.value = '';
 
   // Populate folder dropdown
   if (importCodeSectionSelect) {
@@ -2222,8 +2272,11 @@ function openImportCodeModal() {
   if (importCodeModal) {
     importCodeModal.classList.remove('hidden');
     importCodeModal.classList.add('flex');
-    if (importCodeTextarea) {
-      setTimeout(() => importCodeTextarea.focus(), 60);
+    if (importCodeInput) {
+      setTimeout(() => {
+        importCodeInput.focus();
+        if (prefillCode) importCodeInput.select();
+      }, 60);
     }
   }
 }
@@ -2257,16 +2310,56 @@ function handleAddSectionFromImportModal() {
   }
 }
 
-function handleExecuteImportCode() {
-  const rawCode = importCodeTextarea ? importCodeTextarea.value.trim() : '';
-  if (!rawCode) {
-    showToast('Please paste the Quiz Code first!', 'error');
-    if (importCodeTextarea) importCodeTextarea.focus();
+async function handleExecuteImportCode() {
+  const rawInput = importCodeInput ? importCodeInput.value.trim() : '';
+  if (!rawInput) {
+    showToast('Please enter the 6-digit code or paste quiz link!', 'error');
+    if (importCodeInput) importCodeInput.focus();
     return;
   }
 
+  if (submitImportCodeBtn) {
+    submitImportCodeBtn.disabled = true;
+    submitImportCodeBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs"></i> <span>Loading Quiz...</span>';
+  }
+
   try {
-    const quizData = decodeQuizFromCode(rawCode);
+    let quizData = null;
+
+    // Check if input is a URL containing ?quiz=XXXXXX
+    let potentialCode = rawInput;
+    if (rawInput.includes('?quiz=')) {
+      const m = rawInput.match(/[\?&]quiz=([a-zA-Z0-9]+)/);
+      if (m) potentialCode = m[1];
+    } else if (rawInput.includes('/') && !rawInput.startsWith('{') && !rawInput.startsWith('YTQUIZ-')) {
+      const parts = rawInput.split('/');
+      potentialCode = parts[parts.length - 1];
+    }
+
+    const cleanDigits = potentialCode.replace(/[^a-zA-Z0-9]/g, '');
+
+    // 1. If 6 digits or short code: fetch from local backend server
+    if (cleanDigits.length >= 4 && cleanDigits.length <= 12 && !rawInput.startsWith('YTQUIZ-') && !rawInput.startsWith('{')) {
+      try {
+        const res = await fetch(`/api/quiz/shared/${cleanDigits}`);
+        if (res.ok) {
+          quizData = await res.json();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Quiz code '${cleanDigits}' not found.`);
+        }
+      } catch (netErr) {
+        throw new Error(netErr.message || 'Could not fetch quiz from server. Check your connection.');
+      }
+    } else {
+      // 2. Fallback: Parse raw JSON or legacy Base64 code
+      quizData = decodeQuizFromCode(rawInput);
+    }
+
+    if (!quizData || !quizData.questions || quizData.questions.length === 0) {
+      throw new Error('Invalid quiz data received.');
+    }
+
     const chosenFolder = (importCodeSectionSelect && importCodeSectionSelect.value) ? importCodeSectionSelect.value : (quizData.section || 'General');
 
     const storageId = 'quiz_' + Date.now();
@@ -2290,9 +2383,24 @@ function handleExecuteImportCode() {
     resetCurrentQuiz();
     renderLibrarySections();
     renderLibraryQuizzesGrid();
-    showToast(`🎉 Imported "${quizData.title}" (${quizData.questions.length} Qs) into folder "${chosenFolder}"!`, 'success');
+    showToast(`🎉 Imported "${quizData.title}" (${quizData.questions.length} Qs) into "${chosenFolder}"!`, 'success');
   } catch (err) {
-    showToast(err.message || 'Could not import quiz code.', 'error');
+    showToast(err.message || 'Could not import quiz.', 'error');
+  } finally {
+    if (submitImportCodeBtn) {
+      submitImportCodeBtn.disabled = false;
+      submitImportCodeBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-xs"></i> <span>Import & Start Quiz</span>';
+    }
+  }
+}
+
+function checkUrlSharedQuiz() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const quizCode = urlParams.get('quiz');
+  if (quizCode) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    openImportCodeModal(quizCode);
+    showToast(`📥 Quiz code ${quizCode} detected! Click Import to load.`, 'info');
   }
 }
 

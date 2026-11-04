@@ -728,17 +728,17 @@
     </div>
   </div>
 
-  <!-- Modal: View & Copy Portable Lengthy Quiz Code -->
+  <!-- Modal: 6-Digit Share Code, QR Code & Direct Link -->
   <div id="export-code-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-surface-800">
         <div class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/25">
-            <i class="fa-solid fa-key text-sm"></i>
+            <i class="fa-solid fa-share-nodes text-sm"></i>
           </div>
           <div>
-            <h3 class="text-sm sm:text-base font-extrabold text-white">Portable Quiz Code</h3>
-            <p class="text-[11px] text-slate-400">Copy & paste on any other device to import this exact quiz</p>
+            <h3 class="text-sm sm:text-base font-extrabold text-white">Share Quiz Across Devices</h3>
+            <p class="text-[11px] text-slate-400">Scan QR or enter 6-digit code on another phone/PC</p>
           </div>
         </div>
         <button id="close-export-code-modal-btn" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-surface-800 cursor-pointer">
@@ -746,52 +746,81 @@
         </button>
       </div>
 
-      <div class="space-y-3">
-        <div class="flex items-center justify-between text-xs">
+      <div class="space-y-4 text-center">
+        <!-- Quiz Title & Meta Badge -->
+        <div class="flex items-center justify-between text-xs text-left px-1">
           <span class="font-bold text-slate-200 truncate pr-2" id="export-code-quiz-title">Quiz Title</span>
           <span class="bg-surface-800 px-2.5 py-0.5 rounded-full text-[10px] text-amber-300 font-mono font-bold shrink-0 border border-surface-700" id="export-code-badge">0 Questions</span>
         </div>
 
-        <!-- Readonly Long Textarea for Quiz Code -->
-        <div class="relative">
-          <textarea 
-            id="export-code-textarea" 
-            readonly 
-            rows="6" 
-            class="w-full bg-surface-950 border border-surface-700 text-amber-200/90 rounded-2xl p-3 text-xs font-mono leading-relaxed select-all break-all focus:outline-none focus:border-amber-500/60 shadow-inner"
-            placeholder="Generating Quiz Code..."
-          ></textarea>
+        <!-- 6-Digit PIN Display -->
+        <div class="bg-surface-950 border border-amber-500/40 rounded-2xl p-3.5 space-y-1.5 shadow-inner">
+          <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Short 6-Digit Share Code</span>
+          <div class="flex items-center justify-center gap-2">
+            <span id="share-pin-display" class="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-amber-400 select-all">
+              ------
+            </span>
+            <button id="copy-share-pin-btn" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm" title="Copy 6-Digit Code">
+              <i class="fa-solid fa-copy text-xs"></i>
+              <span>Copy</span>
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-400">Dusre device me sirf ye 6 digit dalo aur quiz instantly khul jayega!</p>
         </div>
 
-        <div class="flex items-start gap-2.5 text-[11px] text-slate-400 bg-surface-850 p-2.5 rounded-xl border border-surface-800 leading-relaxed">
-          <i class="fa-solid fa-circle-info text-amber-400 shrink-0 text-xs mt-0.5"></i>
-          <span>This lengthy code contains all questions, options, verified answer keys & explanations. Use <strong>"Import Quiz Code"</strong> on another laptop, phone, or browser to load it instantly!</span>
+        <!-- QR Code Container -->
+        <div class="flex flex-col items-center justify-center space-y-2">
+          <div id="share-qrcode-box" class="bg-white p-2.5 rounded-2xl shadow-xl border-4 border-surface-800">
+            <!-- QR Canvas will be injected here -->
+          </div>
+          <span class="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-camera text-rose-400 text-xs"></i>
+            <span>Mobile camera se scan karein instant quiz open karne ke liye</span>
+          </span>
+        </div>
+
+        <!-- Direct Shareable Link -->
+        <div class="flex items-center gap-2 bg-surface-950 border border-surface-800 rounded-xl p-1.5 pl-3">
+          <input 
+            type="text" 
+            id="share-link-input" 
+            readonly 
+            class="flex-1 bg-transparent text-[11px] font-mono text-slate-300 outline-none truncate"
+            value="http://..."
+          />
+          <button id="copy-share-link-btn" class="px-3 py-1 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0">
+            Copy Link
+          </button>
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-surface-800">
-        <button id="close-export-code-btn" type="button" class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer">
-          Close
+      <div class="flex items-center justify-between pt-3 border-t border-surface-800">
+        <button id="show-raw-code-btn" type="button" class="text-[11px] text-slate-500 hover:text-slate-400 underline cursor-pointer">
+          Show text code
         </button>
-        <button id="copy-export-code-btn" type="button" class="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg cursor-pointer flex items-center gap-1.5 transition-all">
-          <i class="fa-solid fa-copy text-xs"></i>
-          <span>Copy Full Code</span>
+        <button id="close-export-code-btn" type="button" class="px-5 py-2 bg-surface-800 hover:bg-surface-750 text-white text-xs font-bold rounded-xl cursor-pointer">
+          Done
         </button>
+      </div>
+      
+      <!-- Hidden Collapsible Raw Text Code (for offline fallback) -->
+      <div id="raw-code-container" class="hidden pt-2 border-t border-surface-800 space-y-2">
+        <textarea id="export-code-textarea" readonly rows="3" class="w-full bg-surface-950 border border-surface-800 text-[10px] font-mono p-2 rounded-xl text-slate-400"></textarea>
       </div>
     </div>
   </div>
 
-  <!-- Modal: Import Quiz from Lengthy Text Code -->
+  <!-- Modal: Import Quiz via 6-Digit Code or Link -->
   <div id="import-code-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-surface-800">
         <div class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/25">
             <i class="fa-solid fa-file-import text-sm"></i>
           </div>
           <div>
-            <h3 class="text-sm sm:text-base font-extrabold text-white">Import Quiz from Code</h3>
-            <p class="text-[11px] text-slate-400">Paste the lengthy code to load into your library</p>
+            <h3 class="text-sm sm:text-base font-extrabold text-white">Import Quiz</h3>
+            <p class="text-[11px] text-slate-400">Enter the 6-digit code or paste quiz share link</p>
           </div>
         </div>
         <button id="close-import-code-modal-btn" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-surface-800 cursor-pointer">
@@ -799,17 +828,21 @@
         </button>
       </div>
 
-      <div class="space-y-3.5">
+      <div class="space-y-4">
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1.5">
-            Paste Lengthy Quiz Code:
+            6-Digit Share Code or Link:
           </label>
-          <textarea 
-            id="import-code-textarea" 
-            rows="5" 
-            placeholder="Paste the full code here (e.g. YTQUIZ-v1-... or JSON)..."
-            class="w-full bg-surface-950 border border-surface-700 text-white rounded-2xl p-3 text-xs font-mono leading-relaxed focus:outline-none focus:border-amber-400 placeholder:text-slate-500 shadow-inner"
-          ></textarea>
+          <div class="relative">
+            <input 
+              type="text"
+              id="import-code-input" 
+              placeholder="e.g. 748291 or paste link"
+              maxlength="250"
+              class="w-full bg-surface-950 border border-surface-700 text-white rounded-2xl p-3.5 text-center text-lg sm:text-xl font-mono font-bold tracking-widest focus:outline-none focus:border-amber-400 placeholder:text-slate-600 placeholder:text-sm placeholder:tracking-normal shadow-inner uppercase"
+            />
+          </div>
+          <p class="text-[10px] text-slate-500 mt-1.5">Tip: You can also paste raw JSON or legacy text code here.</p>
         </div>
 
         <div>
@@ -830,7 +863,7 @@
           Cancel
         </button>
         <button id="submit-import-code-btn" type="button" class="px-5 py-2 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white text-xs font-extrabold rounded-xl shadow-lg cursor-pointer flex items-center gap-1.5 transition-all">
-          <i class="fa-solid fa-bolt text-xs"></i>
+          <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
           <span>Import & Start Quiz</span>
         </button>
       </div>
@@ -846,6 +879,7 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=4.0.0"></script>
+  <script src="/static/qrcode.min.js"></script>
+  <script src="/static/app.js?v=4.1.0"></script>
 </body>
 </html>
