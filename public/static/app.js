@@ -358,37 +358,19 @@ function setupNetworkListeners() {
 // LIVE BACKEND SERVER STATUS & HEALTH MONITOR (ONLINE / OFFLINE)
 // ----------------------------------------------------
 
-async function checkServerHealth(manual = false) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-    const res = await fetch('/api/health?_t=' + Date.now(), {
-      signal: controller.signal,
-      cache: 'no-store'
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      isServerOnline = true;
-      if (serverStatusPing) {
-        serverStatusPing.className = 'animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75';
-      }
-      if (serverStatusDot) {
-        serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30';
-      }
-      if (serverStatusPill) {
-        serverStatusPill.title = 'Server: Online (Live on port 8000)';
-      }
-      if (manual) {
-        showToast('🟢 Server is Online and active!', 'success');
-      }
-      return true;
-    } else {
-      throw new Error(`HTTP ${res.status}`);
+function updateServerStatusUI(online) {
+  isServerOnline = !!online;
+  if (online) {
+    if (serverStatusPing) {
+      serverStatusPing.className = 'animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75';
     }
-  } catch (err) {
-    isServerOnline = false;
+    if (serverStatusDot) {
+      serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30';
+    }
+    if (serverStatusPill) {
+      serverStatusPill.title = 'Server: Online (Port 8000)';
+    }
+  } else {
     if (serverStatusPing) {
       serverStatusPing.className = 'hidden';
     }
@@ -398,6 +380,26 @@ async function checkServerHealth(manual = false) {
     if (serverStatusPill) {
       serverStatusPill.title = 'Server: Offline (Click Desktop status file to start)';
     }
+  }
+}
+
+async function checkServerHealth(manual = false) {
+  try {
+    const res = await fetch('/api/health', {
+      cache: 'no-store'
+    });
+
+    if (res.ok) {
+      updateServerStatusUI(true);
+      if (manual) {
+        showToast('🟢 Server is Online and active!', 'success');
+      }
+      return true;
+    } else {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } catch (err) {
+    updateServerStatusUI(false);
     if (manual) {
       showToast('🔴 Server is Offline! Click Desktop status file to start.', 'error');
     }
@@ -406,12 +408,27 @@ async function checkServerHealth(manual = false) {
 }
 
 function startServerHealthMonitor() {
-  // Check immediately on load
+  // Check once immediately on load
   checkServerHealth(false);
 
-  // Poll every 3 seconds to auto-detect when server turns on or off
-  if (healthCheckInterval) clearInterval(healthCheckInterval);
-  healthCheckInterval = setInterval(() => checkServerHealth(false), 3000);
+  // Check when user switches back to this browser tab (No constant 3s polling loop)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkServerHealth(false);
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    checkServerHealth(false);
+  });
+
+  // Check on network online/offline events
+  window.addEventListener('online', () => {
+    checkServerHealth(false);
+  });
+  window.addEventListener('offline', () => {
+    updateServerStatusUI(false);
+  });
 
   // Manual click on status dot
   if (serverStatusPill) {

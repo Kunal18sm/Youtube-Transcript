@@ -33,6 +33,33 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
+import logging
+import sys
+
+# Silence Windows Proactor connection reset noise (WinError 10054)
+if sys.platform == 'win32':
+    try:
+        from asyncio.proactor_events import _ProactorBasePipeTransport
+        _orig_call_connection_lost = _ProactorBasePipeTransport._call_connection_lost
+        def _silenced_call_connection_lost(self, exc):
+            try:
+                _orig_call_connection_lost(self, exc)
+            except (ConnectionResetError, OSError):
+                pass
+        _ProactorBasePipeTransport._call_connection_lost = _silenced_call_connection_lost
+    except Exception:
+        pass
+
+# Suppress /api/health from terminal access logs
+class QuietAccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "/api/health" in msg:
+            return False
+        return True
+
+logging.getLogger("uvicorn.access").addFilter(QuietAccessFilter())
+
 app = FastAPI(title="YouTube Transcript Pro", version="1.0.0")
 
 app.add_middleware(

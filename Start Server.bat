@@ -63,8 +63,8 @@ echo.
 :: Automatically open browser after 2 seconds
 start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:8000"
 
-:: Start Uvicorn directly in this window
-"%PY_EXE%" -m uvicorn app:app --host 0.0.0.0 --port 8000 --log-level info
+:: Start Uvicorn directly in this window (quiet access logs to prevent spam)
+"%PY_EXE%" -m uvicorn app:app --host 0.0.0.0 --port 8000 --no-access-log
 
 if %ERRORLEVEL% NEQ 0 (
     color 0C
