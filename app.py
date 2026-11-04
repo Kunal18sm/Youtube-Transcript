@@ -711,7 +711,11 @@ def get_sw():
     p = os.path.join(BASE_DIR, "public", "sw.js")
     if not os.path.exists(p):
         p = os.path.join(BASE_DIR, "static", "sw.js")
-    return FileResponse(p, media_type="application/javascript")
+    return FileResponse(
+        p,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+    )
 
 @app.get("/icon-192.png")
 def get_icon192():
@@ -742,7 +746,10 @@ def serve_index():
     ]
     for c in candidates:
         if os.path.exists(c):
-            return FileResponse(c)
+            return FileResponse(
+                c,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+            )
     return {"message": "YouTube Transcript Pro API is running"}
 
 if __name__ == "__main__":

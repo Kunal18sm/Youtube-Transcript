@@ -181,10 +181,32 @@ document.addEventListener('DOMContentLoaded', () => {
 // ----------------------------------------------------
 
 function setupPWA() {
-  // Register Service Worker
+  // Register Service Worker with auto-update mechanism
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(err => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Force check for fresh worker on load
+      reg.update().catch(() => {});
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ action: 'skipWaiting' });
+            }
+          });
+        }
+      });
+    }).catch(err => {
       console.log('SW registration note:', err);
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
     });
   }
 
@@ -316,19 +338,16 @@ async function checkServerHealth(manual = false) {
     if (res.ok) {
       isServerOnline = true;
       if (serverStatusPill) {
-        serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm';
+        serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm';
       }
       if (serverStatusDot) {
-        serverStatusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        serverStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
       }
       if (serverStatusText) {
-        serverStatusText.textContent = 'Server: Online';
-      }
-      if (serverOfflineBanner) {
-        serverOfflineBanner.classList.add('hidden');
+        serverStatusText.textContent = 'Live';
       }
       if (manual) {
-        showToast('🟢 Server is ONLINE and running on port 8000!', 'success');
+        showToast('🟢 Server is Live (Port 8000)!', 'success');
       }
       return true;
     } else {
@@ -337,19 +356,16 @@ async function checkServerHealth(manual = false) {
   } catch (err) {
     isServerOnline = false;
     if (serverStatusPill) {
-      serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer bg-rose-950/90 border-rose-500/60 text-rose-300 hover:bg-rose-900/80 shadow-md animate-pulse';
+      serverStatusPill.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-rose-950/80 border-rose-500/60 text-rose-300 hover:bg-rose-900/70 shadow-sm animate-pulse';
     }
     if (serverStatusDot) {
-      serverStatusDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+      serverStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
     }
     if (serverStatusText) {
-      serverStatusText.textContent = 'Server: Offline';
-    }
-    if (serverOfflineBanner) {
-      serverOfflineBanner.classList.remove('hidden');
+      serverStatusText.textContent = 'Offline';
     }
     if (manual) {
-      showToast('🔴 Server is OFFLINE! Double-click Desktop status file to start.', 'error');
+      showToast('🔴 Server is Offline! Click Desktop status file to start.', 'error');
     }
     return false;
   }
@@ -368,16 +384,6 @@ function startServerHealthMonitor() {
     serverStatusPill.addEventListener('click', () => {
       if (serverStatusText) serverStatusText.textContent = 'Checking...';
       checkServerHealth(true);
-    });
-  }
-
-  // Manual click on offline banner retry button
-  if (recheckServerBtn) {
-    recheckServerBtn.addEventListener('click', () => {
-      recheckServerBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs"></i> <span>Checking...</span>';
-      checkServerHealth(true).finally(() => {
-        recheckServerBtn.innerHTML = '<i class="fa-solid fa-rotate text-xs"></i> <span>Check Server Again</span>';
-      });
     });
   }
 }

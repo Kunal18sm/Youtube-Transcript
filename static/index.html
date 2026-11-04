@@ -53,7 +53,7 @@
   </script>
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=4.0.0">
 </head>
 <body class="bg-surface-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white relative overflow-x-hidden pb-16 sm:pb-0">
 
@@ -75,15 +75,15 @@
         <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-rose-600 flex items-center justify-center shadow-lg shadow-rose-600/20 ring-1 ring-white/10 shrink-0">
           <i class="fa-brands fa-youtube text-lg sm:text-xl text-white"></i>
         </div>
-        <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <div class="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white">
             YT Transcript <span class="text-rose-500">Pro</span>
           </h1>
 
-          <!-- Live Server Status Indicator (Online / Offline) -->
-          <button id="server-status-pill" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm" title="Server Status: Click to test / refresh server connection">
-            <span id="server-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span id="server-status-text">Server: Online</span>
+          <!-- Live Server Status Indicator (Compact Pill: Live / Offline) -->
+          <button id="server-status-pill" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold border transition-all cursor-pointer bg-emerald-950/70 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 shadow-sm" title="Server Status: Click to refresh / test connection">
+            <span id="server-status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="server-status-text">Live</span>
           </button>
         </div>
       </div>
@@ -118,30 +118,6 @@
       </div>
 
     </header>
-
-    <!-- Server Offline Alert Banner (Shows when backend server is stopped/offline) -->
-    <div id="server-offline-banner" class="hidden mt-4 p-4 rounded-3xl bg-rose-950/90 border border-rose-500/60 text-white shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn backdrop-blur-xl">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-rose-900/80 text-rose-300 flex items-center justify-center text-lg shrink-0 border border-rose-700/50 shadow-inner">
-          <i class="fa-solid fa-power-off animate-pulse"></i>
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <strong class="font-bold text-white text-sm">Local Server Band Hai (OFFLINE)</strong>
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/30">Disconnected</span>
-          </div>
-          <p class="text-rose-200 text-xs mt-0.5">
-            Website ko use karne ke liye Desktop par <strong class="text-amber-300 font-mono bg-black/40 px-1.5 py-0.5 rounded">YT Transcript - Server Status.bat</strong> file par double-click karke server ON karein.
-          </p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        <button id="recheck-server-btn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-rose-600/30 flex items-center gap-1.5">
-          <i class="fa-solid fa-rotate text-xs"></i>
-          <span>Check Server Again</span>
-        </button>
-      </div>
-    </div>
 
     <!-- Main Content Body (3 Dedicated Pages) -->
     <main class="flex-1 flex flex-col py-4 sm:py-8">
@@ -870,6 +846,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=2.3"></script>
+  <script src="/static/app.js?v=4.0.0"></script>
 </body>
 </html>
