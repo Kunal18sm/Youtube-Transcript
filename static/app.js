@@ -1763,7 +1763,6 @@ async function toggleAllQuestionsLanguage() {
     globalLangLabel.textContent = 'View in English';
   }
 }
-}
 
 // ----------------------------------------------------
 // DEDICATED SAVED QUIZZES LIBRARY PAGE & FOLDERS
