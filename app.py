@@ -755,7 +755,8 @@ def get_mongo():
             (_quiz_users_col, [("username", ASCENDING)], {"unique": True}),
             (_quiz_quizzes_col, [("code", ASCENDING)], {}),
             (_quiz_quizzes_col, [("username", ASCENDING)], {}),
-            (_quiz_quizzes_col, [("id", ASCENDING), ("username", ASCENDING)], {})
+            (_quiz_quizzes_col, [("linked_users", ASCENDING)], {}),
+            (_quiz_quizzes_col, [("id", ASCENDING)], {})
         ]:
             try:
                 col.create_index(idx, **kwargs)
@@ -822,12 +823,45 @@ def sanitize_username(uname: Any) -> str:
 def sanitize_code(code_val: Any) -> str:
     if not code_val or not isinstance(code_val, str):
         raise HTTPException(status_code=400, detail="Invalid quiz code format.")
-    clean = re.sub(r'[^a-zA-Z0-9]', '', code_val).upper()
-    if clean.startswith("YT"):
-        clean = clean[2:]
-    if len(clean) < 4 or len(clean) > 16:
-        raise HTTPException(status_code=400, detail="Quiz code must be 4 to 16 alphanumeric characters.")
+    clean = code_val.strip().upper()
+    if clean.startswith("YTQUIZ-V1-") or clean.startswith("YTQUIZ-") or clean.startswith("YT_"):
+        clean = clean.split("-")[-1].split("_")[-1]
+    clean = re.sub(r'[^A-Z0-9]', '', clean)
+    if len(clean) < 4 or len(clean) > 32:
+        raise HTTPException(status_code=400, detail="Quiz code must be 4 to 32 alphanumeric characters.")
     return clean
+
+ALPHANUM_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ" # 24 uppercase letters (no ambiguous O, I)
+ALPHANUM_DIGITS = "23456789"                # 8 digits (no ambiguous 0, 1)
+ALPHANUM_ALL = ALPHANUM_LETTERS + ALPHANUM_DIGITS
+
+def generate_clean_code(quizzes_col=None, length: int = 6) -> str:
+    """Generate a secure, high-entropy alphanumeric mix (letters + digits) that cannot be guessed."""
+    for _ in range(50):
+        # Guarantee a true mix: at least 2 letters and 2 digits
+        chars = [
+            secrets.choice(ALPHANUM_LETTERS),
+            secrets.choice(ALPHANUM_LETTERS),
+            secrets.choice(ALPHANUM_DIGITS),
+            secrets.choice(ALPHANUM_DIGITS),
+        ]
+        while len(chars) < length:
+            chars.append(secrets.choice(ALPHANUM_ALL))
+        
+        secrets.SystemRandom().shuffle(chars)
+        cand = "".join(chars)
+
+        fp = os.path.join(SHARED_QUIZZES_DIR, f"{cand}.json")
+        if os.path.exists(fp):
+            continue
+        if quizzes_col is not None:
+            try:
+                if quizzes_col.find_one({"code": cand}):
+                    continue
+            except Exception:
+                pass
+        return cand
+    return "".join(secrets.choice(ALPHANUM_ALL) for _ in range(length))
 
 def sanitize_mongo_dict(data: Any) -> Any:
     """Strictly sanitize payload to prevent NoSQL operator injection."""
@@ -853,20 +887,7 @@ def get_lan_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
-def generate_clean_code(quizzes_col=None) -> str:
-    for _ in range(25):
-        cand = str(random.randint(100000, 999999))
-        fp = os.path.join(SHARED_QUIZZES_DIR, f"{cand}.json")
-        if os.path.exists(fp):
-            continue
-        if quizzes_col is not None:
-            try:
-                if quizzes_col.find_one({"code": cand}):
-                    continue
-            except Exception:
-                pass
-        return cand
-    return str(int(time.time()))[-6:]
+
 
 # ==============================================================================
 # AUTH REQUEST MODELS & ENDPOINTS (Simple Login & Logout)
@@ -932,7 +953,7 @@ def auth_login_endpoint(payload: AuthPayload):
     token = secrets.token_hex(32)
     users_col.update_one({"username": uname}, {"$set": {"session_token": token, "last_login": time.time()}})
 
-    cloud_count = quizzes_col.count_documents({"username": uname}) if quizzes_col is not None else 0
+    cloud_count = quizzes_col.count_documents({"$or": [{"linked_users": uname}, {"username": uname}]}) if quizzes_col is not None else 0
 
     return {
         "success": True,
@@ -986,7 +1007,7 @@ def auth_me_endpoint(username: str = Query(...)):
     if not user:
         raise HTTPException(status_code=404, detail="User ID not found.")
 
-    count = quizzes_col.count_documents({"username": uname}) if quizzes_col is not None else 0
+    count = quizzes_col.count_documents({"$or": [{"linked_users": uname}, {"username": uname}]}) if quizzes_col is not None else 0
     return {
         "online": True,
         "username": uname,
@@ -1023,6 +1044,13 @@ def save_quiz_to_cloud(payload: QuizSavePayload):
     if username:
         quiz_data["username"] = username
 
+    linked_users = quiz_data.get("linked_users") or []
+    if not isinstance(linked_users, list):
+        linked_users = [str(linked_users)]
+    if username and username not in linked_users:
+        linked_users.append(username)
+    quiz_data["linked_users"] = linked_users
+
     saved_to_mongo = False
     if quizzes_col is not None:
         try:
@@ -1030,18 +1058,20 @@ def save_quiz_to_cloud(payload: QuizSavePayload):
             doc_to_save.pop("_id", None)
             
             existing = None
-            if username:
-                if code and len(code) >= 4:
-                    existing = quizzes_col.find_one({"code": code, "username": username})
-                if not existing and storage_id:
-                    existing = quizzes_col.find_one({"id": storage_id, "username": username})
-            else:
-                if code and len(code) >= 4:
-                    existing = quizzes_col.find_one({"code": code})
-                if not existing and storage_id:
-                    existing = quizzes_col.find_one({"id": storage_id})
+            if code and len(code) >= 4:
+                existing = quizzes_col.find_one({"code": code})
+            if not existing and storage_id:
+                existing = quizzes_col.find_one({"id": storage_id})
 
             if existing:
+                prev_users = existing.get("linked_users") or []
+                if isinstance(prev_users, list):
+                    for u in prev_users:
+                        if u and u not in linked_users:
+                            linked_users.append(u)
+                doc_to_save["linked_users"] = linked_users
+                if existing.get("username") and not doc_to_save.get("username"):
+                    doc_to_save["username"] = existing["username"]
                 quizzes_col.replace_one({"_id": existing["_id"]}, doc_to_save)
             else:
                 quizzes_col.insert_one(doc_to_save)
@@ -1075,7 +1105,10 @@ def get_user_quizzes(username: str = Query(...)):
         return {"quizzes": [], "mongo": "offline"}
 
     try:
-        cursor = quizzes_col.find({"username": uname}, {"_id": 0}).sort("updated_at", -1)
+        cursor = quizzes_col.find(
+            {"$or": [{"linked_users": uname}, {"username": uname}]},
+            {"_id": 0}
+        ).sort("updated_at", -1)
         quizzes = list(cursor)
         return {
             "success": True,
@@ -1207,30 +1240,16 @@ def import_quiz_by_code(payload: QuizImportPayload):
     username = sanitize_username(payload.username) if payload.username else None
     saved_to_cloud = False
 
-    # If user on this device is logged in, link/save this quiz to their MongoDB account!
+    # If user on this device is logged in, link quiz directly to their MongoDB account!
     if username and quizzes_col is not None:
         try:
-            new_storage_id = f"quiz_{int(time.time()*1000)}"
-            clone_doc = dict(quiz_data)
-            clone_doc["id"] = new_storage_id
-            clone_doc["storageId"] = new_storage_id
-            clone_doc["username"] = username
-            if payload.section:
-                clean_sec = re.sub(r'[^\w\s\-_]', '', str(payload.section))[:50].strip()
-                clone_doc["section"] = clean_sec or "General"
-            clone_doc["updated_at"] = time.time()
-            clone_doc["savedAt"] = time.strftime("%b %d, %Y")
-            clone_doc.pop("_id", None)
-
-            quizzes_col.replace_one(
-                {"id": new_storage_id, "username": username},
-                clone_doc,
-                upsert=True
+            quizzes_col.update_one(
+                {"code": clean_code},
+                {"$addToSet": {"linked_users": username}, "$set": {"updated_at": time.time()}}
             )
-            quiz_data = clone_doc
             saved_to_cloud = True
         except Exception as e:
-            print(f"[MongoDB] Import save to user error: {e}")
+            print(f"[MongoDB] Import link user error: {e}")
 
     return {
         "success": True,
@@ -1244,12 +1263,27 @@ def delete_quiz_endpoint(payload: QuizDeletePayload):
     _, quizzes_col = get_mongo()
     username = sanitize_username(payload.username) if payload.username else None
     clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', str(payload.id))[:64]
-    if quizzes_col is not None and username and clean_id:
+    if quizzes_col is not None and clean_id:
         try:
-            quizzes_col.delete_one({"id": clean_id, "username": username})
+            if username:
+                # 1. Unlink this user from the quiz
+                quizzes_col.update_one(
+                    {"$or": [{"id": clean_id}, {"code": clean_id}]},
+                    {"$pull": {"linked_users": username}}
+                )
+                # 2. Check if any other users still have this quiz linked
+                doc = quizzes_col.find_one({"$or": [{"id": clean_id}, {"code": clean_id}]})
+                if doc:
+                    remaining_users = doc.get("linked_users") or []
+                    creator = doc.get("username")
+                    if (not remaining_users or remaining_users == [username]) and (creator == username or not creator):
+                        quizzes_col.delete_one({"_id": doc["_id"]})
+            else:
+                quizzes_col.delete_one({"id": clean_id})
             return {"success": True, "message": "Deleted from cloud"}
         except Exception as e:
             print(f"[MongoDB] Delete error: {e}")
+    return {"success": True}
     return {"success": True}
 
 @app.put("/api/quiz/update")

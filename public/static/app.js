@@ -154,13 +154,12 @@ const authPasswordInput = document.getElementById('auth-password-input');
 const authSubmitBtn = document.getElementById('auth-submit-btn');
 const authSubmitText = document.getElementById('auth-submit-text');
 
-// Share Modal DOM (6-Digit PIN, QR Code & Direct Link)
+// Share Modal DOM (Alphanumeric Code & Direct Link)
 const exportCodeModal = document.getElementById('export-code-modal');
 const exportCodeQuizTitle = document.getElementById('export-code-quiz-title');
 const exportCodeBadge = document.getElementById('export-code-badge');
 const sharePinDisplay = document.getElementById('share-pin-display');
 const copySharePinBtn = document.getElementById('copy-share-pin-btn');
-const shareQrcodeBox = document.getElementById('share-qrcode-box');
 const shareLinkInput = document.getElementById('share-link-input');
 const copyShareLinkBtn = document.getElementById('copy-share-link-btn');
 const showRawCodeBtn = document.getElementById('show-raw-code-btn');
@@ -1158,10 +1157,16 @@ async function handleGenerateQuiz() {
     currentQuizData.title = customTitle || quizData.title || 'Video Quiz';
     currentQuizData.section = chosenSection;
     activeQuizBadge.classList.remove('hidden');
+
+    // 1. Instantly switch to Quiz Arena & Render questions (0ms UI latency)
     switchPage('quiz');
     resetCurrentQuiz();
-    await autoSaveQuiz(currentQuizData, { section: chosenSection, title: currentQuizData.title });
-    showToast(`✨ Generated ${quizData.total_questions} pure concept MCQs & Auto-Saved!`, 'success');
+    showToast(`✨ Generated ${quizData.total_questions} pure concept MCQs! Ready to practice.`, 'success');
+
+    // 2. Non-blocking Background Auto-Save to MongoDB & Local Cache
+    autoSaveQuiz(currentQuizData, { section: chosenSection, title: currentQuizData.title }).catch(e => {
+      console.warn('Background auto-save notice:', e);
+    });
   } catch (err) {
     progressTracker.stop();
     showToast(`Error: ${err.message}`, 'error');
@@ -1543,18 +1548,10 @@ function handleDeleteSingleQuestion(questionId) {
     currentQuestionIndex = Math.max(0, currentQuizData.questions.length - 1);
   }
 
-  // If this quiz was already in saved library, auto update in localStorage
-  if (currentQuizData.storageId) {
-    const list = getSavedQuizzes();
-    const item = list.find(s => s.id === currentQuizData.storageId);
-    if (item) {
-      item.questions = currentQuizData.questions;
-      item.total_questions = currentQuizData.questions.length;
-      localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
-    }
-  }
+  // Auto-save the updated questions list to both localStorage and MongoDB in background
+  autoSaveQuiz(currentQuizData).catch(() => {});
 
-  showToast('Question deleted from quiz.', 'success');
+  showToast('Question deleted from quiz & database synced.', 'success');
   renderQuizPlayer();
   updateQuizScoreUI();
 }
@@ -2420,7 +2417,6 @@ async function openQuizCodeModal(quizData) {
   if (exportCodeBadge) exportCodeBadge.textContent = `${quizData.questions ? quizData.questions.length : 0} Questions`;
   if (sharePinDisplay) sharePinDisplay.textContent = '...';
   if (shareLinkInput) shareLinkInput.value = 'Generating share code...';
-  if (shareQrcodeBox) shareQrcodeBox.innerHTML = '<div class="w-32 h-32 flex items-center justify-center text-xs text-slate-400"><i class="fa-solid fa-spinner animate-spin mr-1"></i> Generating QR...</div>';
   if (rawCodeContainer) rawCodeContainer.classList.add('hidden');
 
   const rawCode = encodeQuizToCode(quizData);
@@ -2443,26 +2439,11 @@ async function openQuizCodeModal(quizData) {
       if (sharePinDisplay) sharePinDisplay.textContent = data.code;
       if (shareLinkInput) shareLinkInput.value = data.share_url;
 
-      // Render crisp QR code using local qrcode.min.js
-      if (shareQrcodeBox) {
-        shareQrcodeBox.innerHTML = '';
-        if (typeof QRCode !== 'undefined') {
-          new QRCode(shareQrcodeBox, {
-            text: data.share_url,
-            width: 140,
-            height: 140,
-            colorDark: '#07090e',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        }
-      }
-
-      // Auto-copy 6-digit code to clipboard
+      // Auto-copy alphanumeric code to clipboard
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(data.code).catch(() => {});
       }
-      showToast(`Short Code: ${data.code} generated & copied!`, 'success');
+      showToast(`Quiz Code: ${data.code} generated & copied!`, 'success');
       return;
     }
   } catch (err) {
@@ -2567,14 +2548,14 @@ async function handleExecuteImportCode() {
       potentialCode = parts[parts.length - 1];
     }
 
-    const cleanDigits = potentialCode.replace(/[^a-zA-Z0-9]/g, '');
+    const cleanCode = potentialCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     const chosenFolder = (importCodeSectionSelect && importCodeSectionSelect.value) ? importCodeSectionSelect.value : 'General';
 
-    // 1. If 6 digits or short code: fetch from backend server & link to user cloud account
-    if (cleanDigits.length >= 4 && cleanDigits.length <= 12 && !rawInput.startsWith('YTQUIZ-') && !rawInput.startsWith('{')) {
+    // 1. If alphanumeric code (letters + digits): fetch from backend server & link to user cloud account
+    if (cleanCode.length >= 4 && cleanCode.length <= 16 && !rawInput.startsWith('YTQUIZ-') && !rawInput.startsWith('{')) {
       try {
         const payload = {
-          code: cleanDigits,
+          code: cleanCode,
           username: currentUser ? currentUser.username : null,
           section: chosenFolder
         };
@@ -2589,7 +2570,7 @@ async function handleExecuteImportCode() {
           savedToCloud = resData.saved_to_cloud;
         } else {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `Quiz code '${cleanDigits}' not found.`);
+          throw new Error(errData.detail || `Quiz code '${cleanCode}' not found.`);
         }
       } catch (netErr) {
         throw new Error(netErr.message || 'Could not fetch quiz from server. Check your connection.');

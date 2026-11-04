@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yt-transcript-pro-v4.4';
+const CACHE_NAME = 'yt-transcript-pro-v4.5';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -6,8 +6,7 @@ const PRECACHE_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   '/static/styles.css?v=4.0.0',
-  '/static/app.js?v=4.4.0',
-  '/static/qrcode.min.js',
+  '/static/app.js?v=4.5.0',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
   'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap'

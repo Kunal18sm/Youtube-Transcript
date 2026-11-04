@@ -846,7 +846,7 @@
           </div>
           <div>
             <h3 class="text-sm sm:text-base font-extrabold text-white">Share Quiz Across Devices</h3>
-            <p class="text-[11px] text-slate-400">Scan QR or enter 6-digit code on another phone/PC</p>
+            <p class="text-[11px] text-slate-400">Share secret code or direct link to practice on another device</p>
           </div>
         </div>
         <button id="close-export-code-modal-btn" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-surface-800 cursor-pointer">
@@ -861,30 +861,19 @@
           <span class="bg-surface-800 px-2.5 py-0.5 rounded-full text-[10px] text-amber-300 font-mono font-bold shrink-0 border border-surface-700" id="export-code-badge">0 Questions</span>
         </div>
 
-        <!-- 6-Digit PIN Display -->
+        <!-- Alphanumeric Secret Code Display -->
         <div class="bg-surface-950 border border-amber-500/40 rounded-2xl p-3.5 space-y-1.5 shadow-inner">
-          <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Short 6-Digit Share Code</span>
+          <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Secret Alphanumeric Quiz Code</span>
           <div class="flex items-center justify-center gap-2">
             <span id="share-pin-display" class="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-amber-400 select-all">
               ------
             </span>
-            <button id="copy-share-pin-btn" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm" title="Copy 6-Digit Code">
+            <button id="copy-share-pin-btn" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm" title="Copy Secret Code">
               <i class="fa-solid fa-copy text-xs"></i>
               <span>Copy</span>
             </button>
           </div>
-          <p class="text-[10px] text-slate-400">Dusre device me sirf ye 6 digit dalo aur quiz instantly khul jayega!</p>
-        </div>
-
-        <!-- QR Code Container -->
-        <div class="flex flex-col items-center justify-center space-y-2">
-          <div id="share-qrcode-box" class="bg-white p-2.5 rounded-2xl shadow-xl border-4 border-surface-800">
-            <!-- QR Canvas will be injected here -->
-          </div>
-          <span class="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <i class="fa-solid fa-camera text-rose-400 text-xs"></i>
-            <span>Mobile camera se scan karein instant quiz open karne ke liye</span>
-          </span>
+          <p class="text-[10px] text-slate-400">Dusre device me sirf ye code dalo aur quiz instantly link ho jayega!</p>
         </div>
 
         <!-- Direct Shareable Link -->
@@ -987,7 +976,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/qrcode.min.js"></script>
-  <script src="/static/app.js?v=4.4.0"></script>
+  <script src="/static/app.js?v=4.5.0"></script>
 </body>
 </html>
