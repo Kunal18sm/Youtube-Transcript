@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yt-transcript-pro-v4.1';
+const CACHE_NAME = 'yt-transcript-pro-v4.2';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -6,7 +6,7 @@ const PRECACHE_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   '/static/styles.css?v=4.0.0',
-  '/static/app.js?v=4.1.0',
+  '/static/app.js?v=4.2.0',
   '/static/qrcode.min.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',

@@ -7,6 +7,7 @@ import random
 import socket
 import time
 import json
+import hashlib
 from typing import Optional, List, Dict, Any
 import requests
 import yt_dlp
@@ -14,6 +15,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+from pymongo import MongoClient, ASCENDING
+from pymongo.errors import PyMongoError
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     TranscriptsDisabled,
@@ -651,9 +659,12 @@ def translate_endpoint(req: TranslateRequest):
 @app.get("/api/health")
 @app.get("/api/status")
 def health_check():
+    u_col, _ = get_mongo()
+    mongo_status = "connected" if u_col is not None else "offline"
     return {
         "status": "online",
-        "message": "YT Transcript Pro Backend is ONLINE",
+        "mongo": mongo_status,
+        "message": f"YT Transcript Pro Backend is ONLINE (MongoDB: {mongo_status})",
         "port": 8000
     }
 
@@ -699,6 +710,63 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SHARED_QUIZZES_DIR = os.path.join(BASE_DIR, "data", "shared_quizzes")
 os.makedirs(SHARED_QUIZZES_DIR, exist_ok=True)
 
+# ==============================================================================
+# MONGODB CONNECTION & DATABASE SETUP
+# ==============================================================================
+MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
+_mongo_client = None
+_mongo_db = None
+_quiz_users_col = None
+_quiz_quizzes_col = None
+
+def get_mongo():
+    global _mongo_client, _mongo_db, _quiz_users_col, _quiz_quizzes_col
+    if _quiz_users_col is not None and _quiz_quizzes_col is not None:
+        return _quiz_users_col, _quiz_quizzes_col
+
+    uri = os.getenv("MONGODB_URI", "").strip() or MONGODB_URI
+    if not uri:
+        return None, None
+
+    try:
+        if _mongo_client is None:
+            _mongo_client = MongoClient(uri, serverSelectionTimeoutMS=4000, connectTimeoutMS=4000)
+
+        # Target the database from URI or default to 'sahkaar_sevasetu'
+        db_name = "sahkaar_sevasetu"
+        try:
+            if "mongodb.net/" in uri:
+                parsed = uri.split("mongodb.net/")[1].split("?")[0].strip()
+                if parsed:
+                    db_name = parsed
+        except Exception:
+            pass
+
+        _mongo_db = _mongo_client[db_name]
+        _quiz_users_col = _mongo_db["quiz_users"]
+        _quiz_quizzes_col = _mongo_db["quiz_quizzes"]
+
+        # Ensure performance indexes
+        try:
+            _quiz_users_col.create_index([("username", ASCENDING)], unique=True)
+            _quiz_quizzes_col.create_index([("code", ASCENDING)])
+            _quiz_quizzes_col.create_index([("username", ASCENDING)])
+            _quiz_quizzes_col.create_index([("id", ASCENDING), ("username", ASCENDING)], unique=True)
+        except Exception as idx_err:
+            print(f"[MongoDB] Index notice: {idx_err}")
+
+        return _quiz_users_col, _quiz_quizzes_col
+    except Exception as e:
+        print(f"[MongoDB] Connection error: {e}")
+        return None, None
+
+# Try initializing on startup
+get_mongo()
+
+def hash_password(password: str) -> str:
+    salt = "yt_quiz_salt_2026_secured"
+    return hashlib.sha256(f"{salt}{password}".encode("utf-8")).hexdigest()
+
 def get_lan_ip() -> str:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -709,40 +777,250 @@ def get_lan_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
+def generate_clean_code(quizzes_col=None) -> str:
+    for _ in range(25):
+        cand = str(random.randint(100000, 999999))
+        fp = os.path.join(SHARED_QUIZZES_DIR, f"{cand}.json")
+        if os.path.exists(fp):
+            continue
+        if quizzes_col is not None:
+            try:
+                if quizzes_col.find_one({"code": cand}):
+                    continue
+            except Exception:
+                pass
+        return cand
+    return str(int(time.time()))[-6:]
+
+# ==============================================================================
+# AUTH REQUEST MODELS & ENDPOINTS (Simple Login & Logout)
+# ==============================================================================
+class AuthPayload(BaseModel):
+    username: str
+    password: str
+
+class QuizSavePayload(BaseModel):
+    username: Optional[str] = None
+    quiz: Dict[str, Any]
+
+class QuizImportPayload(BaseModel):
+    code: str
+    username: Optional[str] = None
+    section: Optional[str] = None
+
+class QuizDeletePayload(BaseModel):
+    id: str
+    username: Optional[str] = None
+
+class QuizUpdatePayload(BaseModel):
+    id: str
+    username: Optional[str] = None
+    title: Optional[str] = None
+    section: Optional[str] = None
+
+@app.post("/api/auth/login")
+def auth_login_endpoint(payload: AuthPayload):
+    users_col, quizzes_col = get_mongo()
+    if users_col is None:
+        raise HTTPException(status_code=503, detail="MongoDB is currently offline or unreachable. Check internet connection.")
+
+    uname = payload.username.strip().lower()
+    pwd = payload.password.strip()
+
+    if not uname or len(uname) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    if not pwd or len(pwd) < 3:
+        raise HTTPException(status_code=400, detail="Password must be at least 3 characters.")
+
+    user = users_col.find_one({"username": uname})
+    if user:
+        if user.get("password_hash") != hash_password(pwd):
+            raise HTTPException(status_code=401, detail="Incorrect password for this user ID.")
+    else:
+        # Simple auto-registration on first login
+        users_col.insert_one({
+            "username": uname,
+            "password_hash": hash_password(pwd),
+            "created_at": time.time(),
+            "created_at_str": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+    token = hashlib.sha256(f"{uname}:{pwd}:{time.strftime('%Y%m')}".encode()).hexdigest()
+    cloud_count = quizzes_col.count_documents({"username": uname}) if quizzes_col is not None else 0
+
+    return {
+        "success": True,
+        "username": uname,
+        "token": token,
+        "cloud_quizzes": cloud_count,
+        "message": f"Welcome, {uname}!"
+    }
+
+@app.post("/api/auth/register")
+def auth_register_endpoint(payload: AuthPayload):
+    users_col, _ = get_mongo()
+    if users_col is None:
+        raise HTTPException(status_code=503, detail="MongoDB is currently offline or unreachable.")
+
+    uname = payload.username.strip().lower()
+    pwd = payload.password.strip()
+
+    if not uname or len(uname) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    if not pwd or len(pwd) < 3:
+        raise HTTPException(status_code=400, detail="Password must be at least 3 characters.")
+
+    existing = users_col.find_one({"username": uname})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"User ID '{uname}' already exists. Please login instead.")
+
+    users_col.insert_one({
+        "username": uname,
+        "password_hash": hash_password(pwd),
+        "created_at": time.time(),
+        "created_at_str": time.strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+    token = hashlib.sha256(f"{uname}:{pwd}:{time.strftime('%Y%m')}".encode()).hexdigest()
+    return {
+        "success": True,
+        "username": uname,
+        "token": token,
+        "cloud_quizzes": 0,
+        "message": f"Account '{uname}' registered successfully!"
+    }
+
+@app.get("/api/auth/me")
+def auth_me_endpoint(username: str = Query(...)):
+    users_col, quizzes_col = get_mongo()
+    uname = username.strip().lower()
+    if users_col is None:
+        return {"online": False, "username": uname, "cloud_quizzes": 0}
+
+    user = users_col.find_one({"username": uname})
+    if not user:
+        raise HTTPException(status_code=404, detail="User ID not found.")
+
+    count = quizzes_col.count_documents({"username": uname}) if quizzes_col is not None else 0
+    return {
+        "online": True,
+        "username": uname,
+        "cloud_quizzes": count
+    }
+
+# ==============================================================================
+# CLOUD QUIZ ENDPOINTS (Save, Sync, Share, Import to ID)
+# ==============================================================================
+@app.post("/api/quiz/save")
+def save_quiz_to_cloud(payload: QuizSavePayload):
+    _, quizzes_col = get_mongo()
+    quiz_data = payload.quiz
+    if not quiz_data or not isinstance(quiz_data, dict):
+        raise HTTPException(status_code=400, detail="Invalid quiz payload.")
+
+    username = (payload.username or "").strip().lower()
+    storage_id = quiz_data.get("id") or quiz_data.get("storageId") or f"quiz_{int(time.time()*1000)}"
+    quiz_data["id"] = storage_id
+    quiz_data["storageId"] = storage_id
+
+    # Assign or retain 6-digit short code
+    code = str(quiz_data.get("code") or quiz_data.get("share_code") or "").strip()
+    if not code or len(code) < 4:
+        code = generate_clean_code(quizzes_col)
+
+    quiz_data["code"] = code
+    quiz_data["share_code"] = code
+    quiz_data["updated_at"] = time.time()
+    if username:
+        quiz_data["username"] = username
+
+    saved_to_mongo = False
+    if quizzes_col is not None and username:
+        try:
+            doc_to_save = dict(quiz_data)
+            doc_to_save.pop("_id", None)
+            quizzes_col.replace_one(
+                {"id": storage_id, "username": username},
+                doc_to_save,
+                upsert=True
+            )
+            saved_to_mongo = True
+        except Exception as e:
+            print(f"[MongoDB] Save error: {e}")
+
+    # Also backup to local shared quizzes file
+    try:
+        local_fp = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
+        with open(local_fp, "w", encoding="utf-8") as f:
+            json.dump(quiz_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    lan_ip = get_lan_ip()
+    return {
+        "success": True,
+        "code": code,
+        "id": storage_id,
+        "saved_to_mongo": saved_to_mongo,
+        "share_url": f"http://{lan_ip}:8000/?quiz={code}",
+        "local_url": f"http://localhost:8000/?quiz={code}"
+    }
+
+@app.get("/api/user/quizzes")
+def get_user_quizzes(username: str = Query(...)):
+    _, quizzes_col = get_mongo()
+    uname = username.strip().lower()
+    if quizzes_col is None:
+        return {"quizzes": [], "mongo": "offline"}
+
+    try:
+        cursor = quizzes_col.find({"username": uname}, {"_id": 0}).sort("updated_at", -1)
+        quizzes = list(cursor)
+        return {
+            "success": True,
+            "username": uname,
+            "quizzes": quizzes,
+            "total": len(quizzes)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch cloud quizzes: {e}")
+
 @app.post("/api/quiz/share")
 def share_quiz_endpoint(quiz: Dict[str, Any]):
     if not quiz or not isinstance(quiz, dict):
         raise HTTPException(status_code=400, detail="Invalid quiz data")
 
-    # Generate a clean 6-digit pin code
-    code = ""
-    for _ in range(15):
-        candidate = str(random.randint(100000, 999999))
-        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{candidate}.json")
-        if not os.path.exists(file_path):
-            code = candidate
-            break
-    if not code:
-        code = str(int(time.time()))[-6:]
-        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
+    _, quizzes_col = get_mongo()
+    code = str(quiz.get("code") or quiz.get("share_code") or "").strip()
+    if not code or len(code) < 4:
+        code = generate_clean_code(quizzes_col)
 
+    quiz["code"] = code
     quiz["share_code"] = code
     quiz["shared_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
+    # Save to MongoDB if available
+    if quizzes_col is not None:
+        try:
+            doc = dict(quiz)
+            doc.pop("_id", None)
+            quizzes_col.replace_one({"code": code}, doc, upsert=True)
+        except Exception as e:
+            print(f"[MongoDB] Share error: {e}")
+
+    # Save to local file
     try:
+        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(quiz, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save shared quiz: {e}")
+        print(f"[Local Share] File save error: {e}")
 
     lan_ip = get_lan_ip()
-    share_url = f"http://{lan_ip}:8000/?quiz={code}"
-    local_url = f"http://localhost:8000/?quiz={code}"
-
     return {
         "code": code,
-        "share_url": share_url,
-        "local_url": local_url,
+        "share_url": f"http://{lan_ip}:8000/?quiz={code}",
+        "local_url": f"http://localhost:8000/?quiz={code}",
         "title": quiz.get("title", "Video Quiz"),
         "total_questions": len(quiz.get("questions", []))
     }
@@ -753,6 +1031,17 @@ def get_shared_quiz_endpoint(code: str):
     if clean_code.startswith("YT"):
         clean_code = clean_code[2:]
 
+    # 1. First look up from MongoDB
+    _, quizzes_col = get_mongo()
+    if quizzes_col is not None:
+        try:
+            doc = quizzes_col.find_one({"code": clean_code}, {"_id": 0})
+            if doc:
+                return doc
+        except Exception:
+            pass
+
+    # 2. Fallback to local files
     file_path = os.path.join(SHARED_QUIZZES_DIR, f"{clean_code}.json")
     if not os.path.exists(file_path):
         matches = glob.glob(os.path.join(SHARED_QUIZZES_DIR, "*.json"))
@@ -765,7 +1054,7 @@ def get_shared_quiz_endpoint(code: str):
         if matched_file:
             file_path = matched_file
         else:
-            raise HTTPException(status_code=404, detail=f"Quiz code '{code}' not found or expired.")
+            raise HTTPException(status_code=404, detail=f"Quiz code '{code}' not found.")
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -773,6 +1062,104 @@ def get_shared_quiz_endpoint(code: str):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read shared quiz: {e}")
+
+@app.post("/api/quiz/import_code")
+def import_quiz_by_code(payload: QuizImportPayload):
+    clean_code = re.sub(r'[^a-zA-Z0-9]', '', payload.code).upper()
+    if clean_code.startswith("YT"):
+        clean_code = clean_code[2:]
+
+    _, quizzes_col = get_mongo()
+    quiz_data = None
+
+    # Search MongoDB
+    if quizzes_col is not None:
+        try:
+            quiz_data = quizzes_col.find_one({"code": clean_code}, {"_id": 0})
+        except Exception:
+            pass
+
+    # Fallback to local file
+    if not quiz_data:
+        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{clean_code}.json")
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    quiz_data = json.load(f)
+            except Exception:
+                pass
+
+    if not quiz_data:
+        raise HTTPException(status_code=404, detail=f"Quiz code '{payload.code}' not found.")
+
+    username = (payload.username or "").strip().lower()
+    saved_to_cloud = False
+
+    # If user on this device is logged in, link/save this quiz to their MongoDB account!
+    if username and quizzes_col is not None:
+        try:
+            new_storage_id = f"quiz_{int(time.time()*1000)}"
+            clone_doc = dict(quiz_data)
+            clone_doc["id"] = new_storage_id
+            clone_doc["storageId"] = new_storage_id
+            clone_doc["username"] = username
+            if payload.section:
+                clone_doc["section"] = payload.section
+            clone_doc["updated_at"] = time.time()
+            clone_doc["savedAt"] = time.strftime("%b %d, %Y")
+            clone_doc.pop("_id", None)
+
+            quizzes_col.replace_one(
+                {"id": new_storage_id, "username": username},
+                clone_doc,
+                upsert=True
+            )
+            quiz_data = clone_doc
+            saved_to_cloud = True
+        except Exception as e:
+            print(f"[MongoDB] Import save to user error: {e}")
+
+    return {
+        "success": True,
+        "quiz": quiz_data,
+        "saved_to_cloud": saved_to_cloud,
+        "username": username
+    }
+
+@app.delete("/api/quiz/delete")
+def delete_quiz_endpoint(payload: QuizDeletePayload):
+    _, quizzes_col = get_mongo()
+    username = (payload.username or "").strip().lower()
+    if quizzes_col is not None and username and payload.id:
+        try:
+            quizzes_col.delete_one({"id": payload.id, "username": username})
+            return {"success": True, "message": "Deleted from cloud"}
+        except Exception as e:
+            print(f"[MongoDB] Delete error: {e}")
+    return {"success": True}
+
+@app.put("/api/quiz/update")
+def update_quiz_endpoint(payload: QuizUpdatePayload):
+    _, quizzes_col = get_mongo()
+    username = (payload.username or "").strip().lower()
+    if quizzes_col is not None and username and payload.id:
+        try:
+            update_fields = {}
+            if payload.title:
+                update_fields["title"] = payload.title
+            if payload.section:
+                update_fields["section"] = payload.section
+            if update_fields:
+                update_fields["updated_at"] = time.time()
+                quizzes_col.update_one(
+                    {"id": payload.id, "username": username},
+                    {"$set": update_fields}
+                )
+            return {"success": True}
+        except Exception as e:
+            print(f"[MongoDB] Update error: {e}")
+    return {"success": True}
+
 static_dir = os.path.join(BASE_DIR, "public", "static")
 if not os.path.exists(static_dir):
     static_dir = os.path.join(BASE_DIR, "static")

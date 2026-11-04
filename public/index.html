@@ -115,6 +115,40 @@
           <i class="fa-solid fa-cloud-arrow-down text-sm text-rose-400"></i>
           <span>Install App</span>
         </button>
+
+        <!-- Cloud Auth Button (Logged Out state) -->
+        <button id="auth-modal-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-slate-200 hover:text-white border border-surface-700 hover:border-emerald-500/50 font-bold text-xs shadow-md transition-all cursor-pointer">
+          <i class="fa-solid fa-cloud text-xs text-emerald-400"></i>
+          <span>Cloud Login</span>
+        </button>
+
+        <!-- User Profile Pill & Dropdown (Logged In state) -->
+        <div id="user-profile-pill" class="hidden relative">
+          <button id="user-profile-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-white border border-emerald-500/40 font-bold text-xs shadow-md transition-all cursor-pointer">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="user-profile-name" class="max-w-[70px] sm:max-w-[110px] truncate text-emerald-300 font-bold">User</span>
+            <i class="fa-solid fa-chevron-down text-[9px] text-slate-400"></i>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div id="user-profile-menu" class="hidden absolute right-0 top-full mt-2 w-52 bg-surface-900 border border-surface-700 rounded-2xl shadow-2xl p-2 z-50 space-y-1">
+            <div class="px-3 py-2 border-b border-surface-800">
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Cloud ID</p>
+              <p id="user-dropdown-username" class="text-xs font-bold text-white truncate">User</p>
+              <p id="user-cloud-sync-status" class="text-[10px] text-emerald-400 flex items-center gap-1 mt-0.5">
+                <i class="fa-solid fa-database text-emerald-400"></i> <span id="user-cloud-count">MongoDB Synced</span>
+              </p>
+            </div>
+            <button id="user-sync-quizzes-btn" type="button" class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-800 rounded-xl flex items-center gap-2 cursor-pointer transition-all">
+              <i class="fa-solid fa-rotate text-amber-400 text-xs"></i>
+              <span>Sync Cloud Quizzes</span>
+            </button>
+            <button id="user-logout-btn" type="button" class="w-full text-left px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl flex items-center gap-2 cursor-pointer transition-all">
+              <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
       </div>
 
     </header>
@@ -728,6 +762,73 @@
     </div>
   </div>
 
+  <!-- Modal: Simple MongoDB Cloud Login / Register -->
+  <div id="auth-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-surface-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/25">
+            <i class="fa-solid fa-cloud text-sm"></i>
+          </div>
+          <div>
+            <h3 id="auth-modal-title" class="text-base font-extrabold text-white">Cloud Account</h3>
+            <p class="text-[11px] text-slate-400">Save & sync quizzes across all devices</p>
+          </div>
+        </div>
+        <button id="close-auth-modal-btn" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-surface-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <!-- Toggle Login / Register tabs -->
+      <div class="flex bg-surface-950 p-1 rounded-2xl border border-surface-800 text-xs font-bold">
+        <button id="auth-tab-login" type="button" class="flex-1 py-1.5 rounded-xl bg-surface-800 text-white shadow-sm transition-all cursor-pointer">Login</button>
+        <button id="auth-tab-register" type="button" class="flex-1 py-1.5 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer">Create Account</button>
+      </div>
+
+      <form id="auth-form" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">User ID / Username:</label>
+          <input 
+            type="text" 
+            id="auth-username-input" 
+            placeholder="e.g. kunal" 
+            autocomplete="username"
+            required
+            class="w-full bg-surface-950 border border-surface-700 text-white rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-emerald-400 placeholder:text-slate-500 shadow-inner"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">Password / PIN:</label>
+          <input 
+            type="password" 
+            id="auth-password-input" 
+            placeholder="Enter password" 
+            autocomplete="current-password"
+            required
+            class="w-full bg-surface-950 border border-surface-700 text-white rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-emerald-400 placeholder:text-slate-500 shadow-inner"
+          />
+        </div>
+
+        <div class="pt-2">
+          <button 
+            type="submit" 
+            id="auth-submit-btn" 
+            class="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg cursor-pointer flex items-center justify-center gap-2 transition-all"
+          >
+            <i class="fa-solid fa-right-to-bracket text-xs"></i>
+            <span id="auth-submit-text">Login to Cloud</span>
+          </button>
+        </div>
+
+        <p class="text-[10px] text-slate-400 text-center leading-relaxed">
+          💡 Entering a new user ID will automatically register and sync your local quizzes.
+        </p>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: 6-Digit Share Code, QR Code & Direct Link -->
   <div id="export-code-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-surface-900 border border-surface-700 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
@@ -880,6 +981,6 @@
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/static/qrcode.min.js"></script>
-  <script src="/static/app.js?v=4.1.0"></script>
+  <script src="/static/app.js?v=4.2.0"></script>
 </body>
 </html>
