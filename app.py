@@ -879,10 +879,11 @@ def get_mongo():
         return None, None
 
 # Try initializing on startup
+TARGET_DB_NAME = "yt_transcript"
 get_mongo()
 
 def sync_mongo_quiz_write(doc_to_save: dict, code: str) -> bool:
-    """Safely writes quiz document to both yt_transcript and sahkaar_sevasetu databases."""
+    """Safely writes quiz document strictly to yt_transcript.quiz_quizzes."""
     global _mongo_client
     get_mongo()
     if _mongo_client is None:
@@ -891,48 +892,33 @@ def sync_mongo_quiz_write(doc_to_save: dict, code: str) -> bool:
     clean_doc = dict(doc_to_save)
     clean_doc.pop("_id", None)
     
-    written = False
-    last_err = None
-    for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-        try:
-            col = _mongo_client[db_name]["quiz_quizzes"]
-            # Look up existing doc to preserve previous linked users
-            existing = col.find_one({"code": code})
-            if existing:
-                prev_users = existing.get("linked_users") or []
-                curr_users = clean_doc.get("linked_users") or []
-                for u in prev_users:
-                    if u and u not in curr_users:
-                        curr_users.append(u)
-                clean_doc["linked_users"] = curr_users
-                if existing.get("username") and not clean_doc.get("username"):
-                    clean_doc["username"] = existing["username"]
-                col.replace_one({"_id": existing["_id"]}, clean_doc)
-            else:
-                col.replace_one({"code": code}, clean_doc, upsert=True)
-            written = True
-        except Exception as e:
-            last_err = e
-            print(f"[MongoDB Write Error on {db_name}] {e}")
-            
-    if not written:
-        raise last_err or Exception("Failed to write to MongoDB cluster")
+    col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+    existing = col.find_one({"code": code})
+    if existing:
+        prev_users = existing.get("linked_users") or []
+        curr_users = clean_doc.get("linked_users") or []
+        for u in prev_users:
+            if u and u not in curr_users:
+                curr_users.append(u)
+        clean_doc["linked_users"] = curr_users
+        if existing.get("username") and not clean_doc.get("username"):
+            clean_doc["username"] = existing["username"]
+        col.replace_one({"_id": existing["_id"]}, clean_doc)
+    else:
+        col.replace_one({"code": code}, clean_doc, upsert=True)
     return True
 
 def find_mongo_quiz(query: dict):
-    """Finds quiz document searching across both yt_transcript and sahkaar_sevasetu."""
+    """Finds quiz document strictly from yt_transcript.quiz_quizzes."""
     global _mongo_client
     get_mongo()
     if _mongo_client is None:
         return None
-    for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-        try:
-            doc = _mongo_client[db_name]["quiz_quizzes"].find_one(query, {"_id": 0})
-            if doc:
-                return doc
-        except Exception:
-            pass
-    return None
+    try:
+        return _mongo_client[TARGET_DB_NAME]["quiz_quizzes"].find_one(query, {"_id": 0})
+    except Exception as e:
+        print(f"[MongoDB Find Error] {e}")
+        return None
 
 
 def hash_password(password: str) -> str:
@@ -1342,29 +1328,22 @@ def get_user_quizzes(username: str = Query(...)):
     if _mongo_client is None:
         return {"quizzes": [], "mongo": "offline"}
 
-    found_quizzes = {}
-    for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-        try:
-            col = _mongo_client[db_name]["quiz_quizzes"]
-            cursor = col.find(
-                {"$or": [{"linked_users": uname}, {"username": uname}]},
-                {"_id": 0}
-            ).sort("updated_at", -1)
-            for q in cursor:
-                c = q.get("code") or q.get("id")
-                if c and c not in found_quizzes:
-                    found_quizzes[c] = q
-        except Exception as e:
-            print(f"[User Quizzes Fetch Error on {db_name}] {e}")
-
-    quizzes_list = list(found_quizzes.values())
-    quizzes_list.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
-    return {
-        "success": True,
-        "username": uname,
-        "quizzes": quizzes_list,
-        "total": len(quizzes_list)
-    }
+    try:
+        col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+        cursor = col.find(
+            {"$or": [{"linked_users": uname}, {"username": uname}]},
+            {"_id": 0}
+        ).sort("updated_at", -1)
+        quizzes_list = list(cursor)
+        return {
+            "success": True,
+            "username": uname,
+            "quizzes": quizzes_list,
+            "total": len(quizzes_list)
+        }
+    except Exception as e:
+        print(f"[User Quizzes Fetch Error] {e}")
+        return {"quizzes": [], "error": str(e)}
 
 @app.post("/api/quiz/share")
 def share_quiz_endpoint(quiz: Dict[str, Any]):
@@ -1474,15 +1453,14 @@ def import_quiz_by_code(payload: QuizImportPayload):
 
     # If user on this device is logged in, link quiz directly to their MongoDB account!
     if username and _mongo_client is not None:
-        for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-            try:
-                _mongo_client[db_name]["quiz_quizzes"].update_one(
-                    {"code": clean_code},
-                    {"$addToSet": {"linked_users": username}, "$set": {"updated_at": time.time()}}
-                )
-                saved_to_cloud = True
-            except Exception as e:
-                print(f"[MongoDB] Import link user error on {db_name}: {e}")
+        try:
+            _mongo_client[TARGET_DB_NAME]["quiz_quizzes"].update_one(
+                {"code": clean_code},
+                {"$addToSet": {"linked_users": username}, "$set": {"updated_at": time.time()}}
+            )
+            saved_to_cloud = True
+        except Exception as e:
+            print(f"[MongoDB] Import link user error: {e}")
 
     return {
         "success": True,
@@ -1497,25 +1475,24 @@ def delete_quiz_endpoint(payload: QuizDeletePayload):
     username = sanitize_username(payload.username) if payload.username else None
     clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', str(payload.id))[:64]
     if _mongo_client is not None and clean_id:
-        for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-            try:
-                col = _mongo_client[db_name]["quiz_quizzes"]
-                if username:
-                    col.update_one(
-                        {"$or": [{"id": clean_id}, {"code": clean_id}]},
-                        {"$pull": {"linked_users": username}}
-                    )
-                    doc = col.find_one({"$or": [{"id": clean_id}, {"code": clean_id}]})
-                    if doc:
-                        remaining_users = doc.get("linked_users") or []
-                        creator = doc.get("username")
-                        if (not remaining_users or remaining_users == [username]) and (creator == username or not creator):
-                            col.delete_one({"_id": doc["_id"]})
-                else:
-                    col.delete_one({"id": clean_id})
-            except Exception as e:
-                print(f"[MongoDB] Delete error on {db_name}: {e}")
-        return {"success": True, "message": "Deleted from cloud"}
+        try:
+            col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+            if username:
+                col.update_one(
+                    {"$or": [{"id": clean_id}, {"code": clean_id}]},
+                    {"$pull": {"linked_users": username}}
+                )
+                doc = col.find_one({"$or": [{"id": clean_id}, {"code": clean_id}]})
+                if doc:
+                    remaining_users = doc.get("linked_users") or []
+                    creator = doc.get("username")
+                    if (not remaining_users or remaining_users == [username]) and (creator == username or not creator):
+                        col.delete_one({"_id": doc["_id"]})
+            else:
+                col.delete_one({"id": clean_id})
+            return {"success": True, "message": "Deleted from cloud"}
+        except Exception as e:
+            print(f"[MongoDB] Delete error: {e}")
     return {"success": True}
 
 @app.put("/api/quiz/update")
@@ -1532,15 +1509,11 @@ def update_quiz_endpoint(payload: QuizUpdatePayload):
                 update_fields["section"] = re.sub(r'[^\w\s\-_]', '', str(payload.section))[:50].strip()
             if update_fields:
                 update_fields["updated_at"] = time.time()
-                for db_name in ["yt_transcript", "sahkaar_sevasetu"]:
-                    try:
-                        col = _mongo_client[db_name]["quiz_quizzes"]
-                        col.update_one(
-                            {"id": clean_id, "username": username},
-                            {"$set": update_fields}
-                        )
-                    except Exception:
-                        pass
+                col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+                col.update_one(
+                    {"id": clean_id, "username": username},
+                    {"$set": update_fields}
+                )
             return {"success": True}
         except Exception as e:
             print(f"[MongoDB] Update error: {e}")
