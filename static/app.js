@@ -1029,47 +1029,55 @@ let quizProgressInterval = null;
 function startQuizProgressController(numQuestions) {
   if (quizProgressInterval) clearInterval(quizProgressInterval);
 
-  // Dynamic estimate based on question volume
-  let estTotalSec = 11;
-  if (numQuestions <= 5) estTotalSec = 8;
-  else if (numQuestions <= 15) estTotalSec = 12;
-  else if (numQuestions <= 30) estTotalSec = 17;
-  else estTotalSec = 26;
-
+  // Realistic dynamic estimate based on question volume:
+  // Base transcript analysis ~10s + ~0.35s per requested MCQ
+  const estTotalSec = Math.max(12, Math.round(10 + numQuestions * 0.35));
   const startTime = Date.now();
-  let currentPercent = 6;
+  let currentPercent = 5;
 
-  if (quizProgressBar) quizProgressBar.style.width = '6%';
-  if (quizProgressPercent) quizProgressPercent.textContent = '6%';
-  if (quizCountdownText) quizCountdownText.textContent = `Est. ~${estTotalSec}s remaining`;
+  if (quizProgressBar) quizProgressBar.style.width = '5%';
+  if (quizProgressPercent) quizProgressPercent.textContent = '5%';
+  if (quizCountdownText) quizCountdownText.innerHTML = `<i class="fa-regular fa-clock text-amber-400 mr-1"></i>0s elapsed <span class="text-slate-500 mx-1">|</span> Est. ~${estTotalSec}s left`;
 
   const updateUI = () => {
     const elapsedSec = (Date.now() - startTime) / 1000;
-    const remainingSec = Math.max(1, Math.round(estTotalSec - elapsedSec));
+    const elapsedInt = Math.floor(elapsedSec);
 
-    const timeRatio = elapsedSec / estTotalSec;
-    if (timeRatio < 1.0) {
-      currentPercent = Math.min(94, Math.max(currentPercent, Math.round(timeRatio * 95)));
+    // Dynamic, honest remaining or elapsed time display
+    if (elapsedSec < estTotalSec) {
+      const remainingSec = Math.max(1, Math.round(estTotalSec - elapsedSec));
+      if (quizCountdownText) {
+        quizCountdownText.innerHTML = `<i class="fa-regular fa-clock text-amber-400 mr-1"></i>${elapsedInt}s elapsed <span class="text-slate-500 mx-1">|</span> Est. ~${remainingSec}s left`;
+      }
+      // Smooth curve towards ~86% during estimated window
+      const ratio = elapsedSec / estTotalSec;
+      currentPercent = Math.min(86, Math.max(currentPercent, Math.round(5 + ratio * 81)));
     } else {
-      currentPercent = Math.min(97, currentPercent + 0.15);
+      // If taking longer than estimated, NEVER freeze at 1s!
+      // Actively show real-time elapsed seconds so user sees AI is actively fact-checking!
+      const overtime = elapsedSec - estTotalSec;
+      if (quizCountdownText) {
+        quizCountdownText.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-rose-400 mr-1"></i>Deep Fact-Checking underway... <span class="font-bold text-amber-300 ml-1">(${elapsedInt}s)</span>`;
+      }
+      // Asymptotically advance from 86% towards 98% smoothly without stalling
+      currentPercent = Math.min(98, Math.round(86 + (1 - Math.exp(-overtime / 20)) * 12));
     }
 
     if (quizProgressBar) quizProgressBar.style.width = `${currentPercent}%`;
     if (quizProgressPercent) quizProgressPercent.textContent = `${Math.floor(currentPercent)}%`;
-    if (quizCountdownText) quizCountdownText.textContent = `Est. ~${remainingSec}s remaining`;
 
     if (quizLoadingMsg && quizLoadingStage) {
-      if (currentPercent < 25) {
+      if (currentPercent < 22) {
         quizLoadingMsg.textContent = 'Analyzing lecture transcript & timestamps...';
-        quizLoadingStage.innerHTML = '<i class="fa-solid fa-file-lines text-slate-500 text-[10px]"></i> <span>Stage 1/4: Analyzing lecture</span>';
+        quizLoadingStage.innerHTML = '<i class="fa-solid fa-file-lines text-slate-400 text-[10px]"></i> <span>Stage 1/4: Analyzing lecture</span>';
       } else if (currentPercent < 55) {
         quizLoadingMsg.textContent = `Extracting key facts & formulating ${numQuestions} MCQs...`;
         quizLoadingStage.innerHTML = '<i class="fa-solid fa-brain text-indigo-400 text-[10px]"></i> <span>Stage 2/4: Formulating MCQs</span>';
-      } else if (currentPercent < 85) {
+      } else if (currentPercent < 82) {
         quizLoadingMsg.textContent = 'Dual-pass AI fact-checking & auditing answer keys...';
         quizLoadingStage.innerHTML = '<i class="fa-solid fa-shield-halved text-emerald-400 text-[10px]"></i> <span>Stage 3/4: Dual-Pass Fact-Checking</span>';
       } else {
-        quizLoadingMsg.textContent = 'Finalizing verified questions & explanation proofs...';
+        quizLoadingMsg.textContent = `Verifying question accuracy & explanation proofs (${elapsedInt}s)...`;
         quizLoadingStage.innerHTML = '<i class="fa-solid fa-check-double text-rose-400 text-[10px]"></i> <span>Stage 4/4: Final verification</span>';
       }
     }
@@ -1084,7 +1092,7 @@ function startQuizProgressController(numQuestions) {
       if (quizProgressBar) quizProgressBar.style.width = '100%';
       if (quizProgressPercent) quizProgressPercent.textContent = '100%';
       if (quizLoadingMsg) quizLoadingMsg.textContent = '✅ 100% Fact-Checked! Launching Quiz Arena...';
-      if (quizCountdownText) quizCountdownText.textContent = 'Ready!';
+      if (quizCountdownText) quizCountdownText.innerHTML = '<i class="fa-solid fa-check text-emerald-400 mr-1"></i>Ready!';
     },
     stop: () => {
       if (quizProgressInterval) clearInterval(quizProgressInterval);

@@ -28,8 +28,8 @@ def get_gemini_api_key() -> Optional[str]:
     return os.environ.get("GEMINI_API_KEY")
 
 MODELS_TO_TRY = [
-    "gemini-flash-lite-latest",
-    "gemini-3.5-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
     "gemini-flash-latest"
 ]
@@ -85,7 +85,7 @@ def call_gemini(prompt: str, api_key: str, temperature: float = 0.1) -> List[Dic
         # Try up to 2 attempts per model in case of temporary 503 spikes
         for attempt in range(2):
             try:
-                res = requests.post(url, json=payload, timeout=35)
+                res = requests.post(url, json=payload, timeout=14)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
