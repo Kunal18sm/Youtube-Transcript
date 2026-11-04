@@ -111,12 +111,33 @@ const downloadQuizTextBtn = document.getElementById('download-quiz-text-btn');
 const retakeQuizBtn = document.getElementById('retake-quiz-btn');
 const toggleAllHindiBtn = document.getElementById('toggle-all-hindi-btn');
 const globalLangLabel = document.getElementById('global-lang-label');
+const shareQuizCodeBtn = document.getElementById('share-quiz-code-btn');
+const emptyImportCodeBtn = document.getElementById('empty-import-code-btn');
+
+// Export Code Modal DOM
+const exportCodeModal = document.getElementById('export-code-modal');
+const exportCodeTextarea = document.getElementById('export-code-textarea');
+const exportCodeQuizTitle = document.getElementById('export-code-quiz-title');
+const exportCodeBadge = document.getElementById('export-code-badge');
+const closeExportCodeModalBtn = document.getElementById('close-export-code-modal-btn');
+const closeExportCodeBtn = document.getElementById('close-export-code-btn');
+const copyExportCodeBtn = document.getElementById('copy-export-code-btn');
+
+// Import Code Modal DOM
+const importCodeModal = document.getElementById('import-code-modal');
+const importCodeTextarea = document.getElementById('import-code-textarea');
+const importCodeSectionSelect = document.getElementById('import-code-section-select');
+const importCodeAddSectionBtn = document.getElementById('import-code-add-section-btn');
+const closeImportCodeModalBtn = document.getElementById('close-import-code-modal-btn');
+const cancelImportCodeBtn = document.getElementById('cancel-import-code-btn');
+const submitImportCodeBtn = document.getElementById('submit-import-code-btn');
 
 // Library Page DOM Elements
 const libraryQuizzesGrid = document.getElementById('library-quizzes-grid');
 const librarySectionPills = document.getElementById('library-section-pills');
 const createSectionBtn = document.getElementById('create-section-btn');
 const importQuizFile = document.getElementById('import-quiz-file');
+const importCodeModalBtn = document.getElementById('import-code-modal-btn');
 
 // Toast DOM
 const toast = document.getElementById('toast');
@@ -395,10 +416,39 @@ function setupEventListeners() {
   downloadQuizJsonBtn.addEventListener('click', downloadQuizAsJson);
   downloadQuizTextBtn.addEventListener('click', downloadQuizAsPrintableText);
   toggleAllHindiBtn.addEventListener('click', toggleAllQuestionsLanguage);
+  if (shareQuizCodeBtn) {
+    shareQuizCodeBtn.addEventListener('click', () => openQuizCodeModal(currentQuizData));
+  }
+  if (emptyImportCodeBtn) {
+    emptyImportCodeBtn.addEventListener('click', openImportCodeModal);
+  }
 
-  // Library Page: Add New Folder & File Import
+  // Library Page: Add New Folder & File / Code Import
   createSectionBtn.addEventListener('click', handleCreateNewSection);
   importQuizFile.addEventListener('change', handleImportQuizFile);
+  if (importCodeModalBtn) {
+    importCodeModalBtn.addEventListener('click', openImportCodeModal);
+  }
+
+  // Portable Quiz Code Modals Listeners
+  if (closeExportCodeModalBtn) closeExportCodeModalBtn.addEventListener('click', closeQuizCodeModal);
+  if (closeExportCodeBtn) closeExportCodeBtn.addEventListener('click', closeQuizCodeModal);
+  if (copyExportCodeBtn) copyExportCodeBtn.addEventListener('click', copyExportCodeText);
+  if (exportCodeModal) {
+    exportCodeModal.addEventListener('click', (e) => {
+      if (e.target === exportCodeModal) closeQuizCodeModal();
+    });
+  }
+
+  if (closeImportCodeModalBtn) closeImportCodeModalBtn.addEventListener('click', closeImportCodeModal);
+  if (cancelImportCodeBtn) cancelImportCodeBtn.addEventListener('click', closeImportCodeModal);
+  if (submitImportCodeBtn) submitImportCodeBtn.addEventListener('click', handleExecuteImportCode);
+  if (importCodeAddSectionBtn) importCodeAddSectionBtn.addEventListener('click', handleAddSectionFromImportModal);
+  if (importCodeModal) {
+    importCodeModal.addEventListener('click', (e) => {
+      if (e.target === importCodeModal) closeImportCodeModal();
+    });
+  }
 
   // Quiz Title Rename & Customization Modal Listeners
   if (editActiveQuizTitleBtn) {
@@ -1414,6 +1464,10 @@ function renderLibraryQuizzesGrid() {
           <i class="fa-solid fa-play text-[9px]"></i> Start Practice Arena
         </button>
 
+        <button class="p-2 bg-surface-800 hover:bg-amber-950/40 text-amber-300 border border-surface-700 hover:border-amber-500/40 rounded-xl text-xs cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}" title="Copy full portable Quiz Code to share or use on any device">
+          <i class="fa-solid fa-key text-xs text-amber-400"></i>
+        </button>
+
         <button class="p-2 bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700 rounded-xl text-xs cursor-pointer download-saved-btn" data-id="${quiz.id}" title="Download JSON">
           <i class="fa-solid fa-download text-xs text-rose-400"></i>
         </button>
@@ -1430,6 +1484,13 @@ function renderLibraryQuizzesGrid() {
   // Attach actions
   document.querySelectorAll('.play-saved-btn').forEach(btn => {
     btn.addEventListener('click', () => loadSavedQuiz(btn.dataset.id));
+  });
+
+  document.querySelectorAll('.copy-quiz-code-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = getSavedQuizzes().find(item => item.id === btn.dataset.id);
+      if (q) openQuizCodeModal(q);
+    });
   });
 
   document.querySelectorAll('.edit-quiz-btn').forEach(btn => {
@@ -1699,6 +1760,223 @@ function handleImportQuizFile(e) {
     }
   };
   reader.readAsText(file);
+}
+
+// ----------------------------------------------------
+// PORTABLE QUIZ CODE ENGINE (Import & Export via Long Text Code)
+// ----------------------------------------------------
+
+function encodeQuizToCode(quizData) {
+  if (!quizData) return '';
+  const payload = {
+    format: 'YTQUIZ_PORTABLE_V1',
+    title: quizData.title || 'Video Quiz',
+    section: quizData.section || 'General',
+    difficulty: quizData.difficulty || 'Medium',
+    total_questions: quizData.questions ? quizData.questions.length : 0,
+    fact_checked_by_ai: quizData.fact_checked_by_ai !== false,
+    questions: quizData.questions || [],
+    exported_at: new Date().toISOString()
+  };
+  const jsonStr = JSON.stringify(payload);
+  const base64Str = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+    return String.fromCharCode('0x' + p1);
+  }));
+  return `YTQUIZ-v1-${base64Str}`;
+}
+
+function decodeQuizFromCode(codeStr) {
+  if (!codeStr || typeof codeStr !== 'string') {
+    throw new Error('Please paste a valid Quiz Code.');
+  }
+
+  let cleaned = codeStr.trim();
+
+  // Strip prefixes
+  if (cleaned.startsWith('YTQUIZ-v1-')) {
+    cleaned = cleaned.substring('YTQUIZ-v1-'.length).trim();
+  } else if (cleaned.startsWith('YTQUIZ:')) {
+    cleaned = cleaned.substring('YTQUIZ:'.length).trim();
+  }
+
+  // Case 1: Raw JSON
+  if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (parsed.questions && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+
+  // Case 2: Base64 UTF-8
+  try {
+    const rawBinary = atob(cleaned);
+    const jsonStr = decodeURIComponent(Array.prototype.map.call(rawBinary, (c) => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+      throw new Error('Quiz Code contains no questions.');
+    }
+    return parsed;
+  } catch (err) {
+    throw new Error('Invalid or corrupted Quiz Code. Please verify that you copied the complete code.');
+  }
+}
+
+function openQuizCodeModal(quizData) {
+  if (!quizData) {
+    showToast('No quiz available to generate code!', 'error');
+    return;
+  }
+  const code = encodeQuizToCode(quizData);
+  if (!code) return;
+
+  if (exportCodeQuizTitle) exportCodeQuizTitle.textContent = quizData.title || 'Video Quiz';
+  if (exportCodeBadge) exportCodeBadge.textContent = `${quizData.questions ? quizData.questions.length : 0} Questions`;
+  if (exportCodeTextarea) exportCodeTextarea.value = code;
+
+  // Auto-copy to clipboard immediately
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('Quiz Code copied to clipboard! Share on any device.', 'success');
+    }).catch(() => {});
+  }
+
+  if (exportCodeModal) {
+    exportCodeModal.classList.remove('hidden');
+    exportCodeModal.classList.add('flex');
+    if (exportCodeTextarea) {
+      setTimeout(() => {
+        exportCodeTextarea.focus();
+        exportCodeTextarea.select();
+      }, 50);
+    }
+  }
+}
+
+function closeQuizCodeModal() {
+  if (exportCodeModal) {
+    exportCodeModal.classList.add('hidden');
+    exportCodeModal.classList.remove('flex');
+  }
+}
+
+function copyExportCodeText() {
+  if (!exportCodeTextarea) return;
+  exportCodeTextarea.focus();
+  exportCodeTextarea.select();
+
+  const code = exportCodeTextarea.value;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('Quiz Code copied to clipboard!', 'success');
+      if (copyExportCodeBtn) {
+        const origHTML = copyExportCodeBtn.innerHTML;
+        copyExportCodeBtn.innerHTML = '<i class="fa-solid fa-check text-xs"></i> <span>Copied!</span>';
+        setTimeout(() => { copyExportCodeBtn.innerHTML = origHTML; }, 2000);
+      }
+    }).catch(() => {
+      document.execCommand('copy');
+      showToast('Quiz Code copied!', 'success');
+    });
+  } else {
+    document.execCommand('copy');
+    showToast('Quiz Code copied!', 'success');
+  }
+}
+
+function openImportCodeModal() {
+  if (importCodeTextarea) importCodeTextarea.value = '';
+
+  // Populate folder dropdown
+  if (importCodeSectionSelect) {
+    importCodeSectionSelect.innerHTML = '';
+    const sections = getStoredSections().filter(s => s !== 'All');
+    sections.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = `📁 ${s}`;
+      importCodeSectionSelect.appendChild(opt);
+    });
+  }
+
+  if (importCodeModal) {
+    importCodeModal.classList.remove('hidden');
+    importCodeModal.classList.add('flex');
+    if (importCodeTextarea) {
+      setTimeout(() => importCodeTextarea.focus(), 60);
+    }
+  }
+}
+
+function closeImportCodeModal() {
+  if (importCodeModal) {
+    importCodeModal.classList.add('hidden');
+    importCodeModal.classList.remove('flex');
+  }
+}
+
+function handleAddSectionFromImportModal() {
+  const name = prompt('Enter new folder/section name (e.g. Modern History, Physics, Biology):');
+  if (!name || !name.trim()) return;
+  const cleanName = name.trim();
+  const sections = getStoredSections();
+  if (!sections.includes(cleanName)) {
+    sections.push(cleanName);
+    saveStoredSections(sections);
+    populateSectionDropdown();
+    renderLibrarySections();
+
+    if (importCodeSectionSelect) {
+      const opt = document.createElement('option');
+      opt.value = cleanName;
+      opt.textContent = `📁 ${cleanName}`;
+      opt.selected = true;
+      importCodeSectionSelect.appendChild(opt);
+    }
+    showToast(`Folder "${cleanName}" created!`, 'success');
+  }
+}
+
+function handleExecuteImportCode() {
+  const rawCode = importCodeTextarea ? importCodeTextarea.value.trim() : '';
+  if (!rawCode) {
+    showToast('Please paste the Quiz Code first!', 'error');
+    if (importCodeTextarea) importCodeTextarea.focus();
+    return;
+  }
+
+  try {
+    const quizData = decodeQuizFromCode(rawCode);
+    const chosenFolder = (importCodeSectionSelect && importCodeSectionSelect.value) ? importCodeSectionSelect.value : (quizData.section || 'General');
+
+    const storageId = 'quiz_' + Date.now();
+    quizData.id = storageId;
+    quizData.storageId = storageId;
+    quizData.section = chosenFolder;
+    quizData.savedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Save into saved quizzes library
+    const list = getSavedQuizzes();
+    list.unshift(quizData);
+    localStorage.setItem('yt_saved_quizzes', JSON.stringify(list));
+
+    // Load into active quiz arena
+    currentQuizData = quizData;
+    activeQuizBadge.classList.remove('hidden');
+    updateSavedQuizBadge();
+    closeImportCodeModal();
+
+    switchPage('quiz');
+    resetCurrentQuiz();
+    renderLibrarySections();
+    renderLibraryQuizzesGrid();
+    showToast(`🎉 Imported "${quizData.title}" (${quizData.questions.length} Qs) into folder "${chosenFolder}"!`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not import quiz code.', 'error');
+  }
 }
 
 function downloadQuizAsJson() {
