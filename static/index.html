@@ -560,6 +560,12 @@
                 <span>Copy Quiz Code</span>
               </button>
 
+              <!-- 1-Click Push This Active Quiz to MongoDB -->
+              <button id="push-active-quiz-mongo-btn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Directly push and save this quiz to MongoDB database so others can access it via code">
+                <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
+                <span id="push-active-quiz-label">Push to MongoDB</span>
+              </button>
+
               <!-- Global Hindi / English Toggle -->
               <button id="toggle-all-hindi-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-language text-xs text-rose-400"></i>
@@ -662,6 +668,12 @@
           </div>
 
           <div class="flex items-center gap-2 flex-wrap">
+            <!-- 1-Click Push ALL Quizzes to MongoDB -->
+            <button id="push-all-quizzes-mongo-btn" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to MongoDB Cloud so they can be accessed anywhere via code">
+              <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
+              <span id="push-all-quizzes-label">Push All to MongoDB</span>
+            </button>
+
             <button id="import-code-modal-btn" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-surface-800 hover:from-amber-500/30 hover:to-surface-750 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm">
               <i class="fa-solid fa-key text-amber-400"></i>
               <span>Import Quiz Code</span>

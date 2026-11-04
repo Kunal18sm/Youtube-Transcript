@@ -1007,6 +1007,10 @@ class QuizSavePayload(BaseModel):
     username: Optional[str] = None
     quiz: Dict[str, Any]
 
+class QuizBulkSavePayload(BaseModel):
+    username: Optional[str] = None
+    quizzes: List[Dict[str, Any]]
+
 class QuizImportPayload(BaseModel):
     code: str
     username: Optional[str] = None
@@ -1202,6 +1206,74 @@ def save_quiz_to_cloud(payload: QuizSavePayload):
         "saved_to_mongo": saved_to_mongo,
         "share_url": f"http://{lan_ip}:8000/?quiz={code}",
         "local_url": f"http://localhost:8000/?quiz={code}"
+    }
+
+@app.post("/api/quiz/save_all")
+def save_all_quizzes_to_cloud(payload: QuizBulkSavePayload):
+    _, quizzes_col = get_mongo()
+    if not payload.quizzes or not isinstance(payload.quizzes, list):
+        raise HTTPException(status_code=400, detail="Invalid quizzes list. Must be a non-empty array.")
+
+    username = sanitize_username(payload.username) if payload.username else None
+    results = {}
+    saved_count = 0
+
+    for q in payload.quizzes:
+        if not isinstance(q, dict) or not q.get("questions"):
+            continue
+        try:
+            quiz_data = sanitize_mongo_dict(q)
+            raw_id = str(quiz_data.get("id") or quiz_data.get("storageId") or f"quiz_{int(time.time()*1000)}")
+            storage_id = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_id)[:64]
+            quiz_data["id"] = storage_id
+            quiz_data["storageId"] = storage_id
+
+            code = str(quiz_data.get("code") or quiz_data.get("share_code") or "").strip()
+            if not code or len(code) < 4:
+                code = generate_clean_code(quizzes_col)
+            else:
+                code = sanitize_code(code)
+
+            quiz_data["code"] = code
+            quiz_data["share_code"] = code
+            quiz_data["updated_at"] = time.time()
+            if username:
+                quiz_data["username"] = username
+
+            linked_users = quiz_data.get("linked_users") or []
+            if not isinstance(linked_users, list):
+                linked_users = [str(linked_users)]
+            if username and username not in linked_users:
+                linked_users.append(username)
+            quiz_data["linked_users"] = linked_users
+
+            if quizzes_col is not None:
+                doc_to_save = dict(quiz_data)
+                doc_to_save.pop("_id", None)
+                quizzes_col.replace_one({"code": code}, doc_to_save, upsert=True)
+
+            try:
+                local_fp = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
+                with open(local_fp, "w", encoding="utf-8") as f:
+                    json.dump(quiz_data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
+            results[storage_id] = {
+                "code": code,
+                "title": quiz_data.get("title", "Video Quiz"),
+                "total_questions": len(quiz_data.get("questions", []))
+            }
+            saved_count += 1
+        except Exception as e:
+            print(f"[MongoDB Bulk Save Error] {e}")
+
+    return {
+        "success": True,
+        "saved_count": saved_count,
+        "total": len(payload.quizzes),
+        "results": results,
+        "mongo_status": "connected" if quizzes_col is not None else "offline"
     }
 
 @app.get("/api/user/quizzes")
