@@ -668,6 +668,12 @@
           </div>
 
           <div class="flex items-center gap-2 flex-wrap">
+            <!-- 1-Click Browse All Quizzes Available in MongoDB -->
+            <button id="open-mongo-catalog-btn" class="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer" title="View all quizzes headings and codes saved in MongoDB Cloud">
+              <i class="fa-solid fa-database text-xs text-cyan-400"></i>
+              <span>MongoDB Quizzes Catalog</span>
+            </button>
+
             <!-- 1-Click Push ALL Quizzes to MongoDB -->
             <button id="push-all-quizzes-mongo-btn" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to MongoDB Cloud so they can be accessed anywhere via code">
               <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
@@ -697,9 +703,23 @@
           </div>
         </div>
 
-        <!-- Section / Folder Filter Pills -->
-        <div id="library-section-pills" class="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 text-xs">
-          <!-- Dynamic section pills like [All (8)] [History (3)] [Coding (5)] -->
+        <!-- Section / Folder Filter Pills & Sort Selector Row -->
+        <div class="flex items-center justify-between gap-3 flex-wrap bg-surface-900/60 border border-surface-800/80 rounded-2xl p-2.5">
+          <div id="library-section-pills" class="flex items-center gap-2 overflow-x-auto custom-scrollbar text-xs flex-1">
+            <!-- Dynamic section pills like [All (8)] [History (3)] [Coding (5)] -->
+          </div>
+
+          <!-- Sort by Heading / Title -->
+          <div class="flex items-center gap-1.5 text-xs text-slate-400 bg-surface-800/80 border border-surface-700 px-3 py-1.5 rounded-xl ml-auto">
+            <i class="fa-solid fa-arrow-down-a-z text-rose-400 text-xs"></i>
+            <span class="font-semibold text-slate-300 text-[11px]">Sort:</span>
+            <select id="library-sort-select" class="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer">
+              <option value="title_asc" selected class="bg-surface-900 text-white">Heading / Title (A-Z)</option>
+              <option value="title_desc" class="bg-surface-900 text-white">Heading / Title (Z-A)</option>
+              <option value="newest" class="bg-surface-900 text-white">Newest First</option>
+              <option value="questions" class="bg-surface-900 text-white">Most Questions</option>
+            </select>
+          </div>
         </div>
 
         <!-- Saved Quizzes Grid Container -->
@@ -979,6 +999,55 @@
     </div>
   </div>
 
+  <!-- Modal: MongoDB Quizzes Cloud Catalog / Directory -->
+  <div id="mongo-catalog-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-surface-900 border border-surface-700/80 rounded-3xl p-5 sm:p-6 max-w-3xl w-full shadow-2xl space-y-4 max-h-[88vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-surface-800 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-database"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-extrabold text-white">MongoDB Cloud Quizzes Directory</h3>
+              <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-400">yt_transcript</span>
+            </div>
+            <p class="text-xs text-slate-400">All saved quizzes with their Headings & 6-digit Codes</p>
+          </div>
+        </div>
+        <button id="close-mongo-catalog-btn" class="w-8 h-8 rounded-full bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Search Input -->
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input type="text" id="mongo-catalog-search" placeholder="Search by quiz heading name or 6-digit PIN code..." class="w-full bg-surface-950 border border-surface-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50">
+      </div>
+
+      <!-- Quizzes List View -->
+      <div id="mongo-catalog-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1.5 custom-scrollbar min-h-[280px]">
+        <div class="text-center py-16 text-slate-400 text-xs">
+          <i class="fa-solid fa-spinner animate-spin text-xl mb-2 text-cyan-400 block"></i>
+          Connecting to MongoDB Cloud Directory...
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="border-t border-surface-800 pt-3 flex items-center justify-between text-xs text-slate-400">
+        <span id="mongo-catalog-count" class="font-semibold text-slate-300">0 quizzes found</span>
+        <button id="refresh-mongo-catalog-btn" class="px-3.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer">
+          <i class="fa-solid fa-arrows-rotate text-[11px] text-cyan-400"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Toast Notification Popup -->
   <div id="toast" class="fixed bottom-16 sm:bottom-6 right-4 sm:right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
     <div class="bg-surface-800/95 backdrop-blur-xl border border-surface-600 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-semibold">
@@ -988,6 +1057,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=4.7.0"></script>
+  <script src="/static/app.js?v=4.8.0"></script>
 </body>
 </html>

@@ -120,6 +120,16 @@ const pushAllQuizzesMongoBtn = document.getElementById('push-all-quizzes-mongo-b
 const pushAllQuizzesLabel = document.getElementById('push-all-quizzes-label');
 const emptyImportCodeBtn = document.getElementById('empty-import-code-btn');
 
+// MongoDB Cloud Catalog & Library Sorting DOM
+const openMongoCatalogBtn = document.getElementById('open-mongo-catalog-btn');
+const closeMongoCatalogBtn = document.getElementById('close-mongo-catalog-btn');
+const mongoCatalogModal = document.getElementById('mongo-catalog-modal');
+const mongoCatalogList = document.getElementById('mongo-catalog-list');
+const mongoCatalogSearch = document.getElementById('mongo-catalog-search');
+const mongoCatalogCount = document.getElementById('mongo-catalog-count');
+const refreshMongoCatalogBtn = document.getElementById('refresh-mongo-catalog-btn');
+const librarySortSelect = document.getElementById('library-sort-select');
+
 // Quiz Arena View Mode DOM (1-by-1 Focus Mode vs All Questions)
 const viewModeSingleBtn = document.getElementById('view-mode-single-btn');
 const viewModeAllBtn = document.getElementById('view-mode-all-btn');
@@ -654,6 +664,30 @@ function setupEventListeners() {
   }
   if (pushAllQuizzesMongoBtn) {
     pushAllQuizzesMongoBtn.addEventListener('click', handlePushAllQuizzesToMongo);
+  }
+
+  // Library Sort Select (Sort by Heading / Title A-Z by default)
+  if (librarySortSelect) {
+    librarySortSelect.addEventListener('change', renderLibraryQuizzesGrid);
+  }
+
+  // MongoDB Cloud Directory / Catalog Modal Listeners
+  if (openMongoCatalogBtn) {
+    openMongoCatalogBtn.addEventListener('click', openMongoCatalogModal);
+  }
+  if (closeMongoCatalogBtn) {
+    closeMongoCatalogBtn.addEventListener('click', closeMongoCatalogModal);
+  }
+  if (refreshMongoCatalogBtn) {
+    refreshMongoCatalogBtn.addEventListener('click', () => fetchAndRenderMongoCatalog(mongoCatalogSearch ? mongoCatalogSearch.value : ''));
+  }
+  if (mongoCatalogSearch) {
+    mongoCatalogSearch.addEventListener('input', (e) => renderMongoCatalogItems(e.target.value));
+  }
+  if (mongoCatalogModal) {
+    mongoCatalogModal.addEventListener('click', (e) => {
+      if (e.target === mongoCatalogModal) closeMongoCatalogModal();
+    });
   }
 
   // 6-Digit Share Modal Listeners
@@ -1872,7 +1906,7 @@ function handleDeleteSection(sectionName) {
     }
   });
   if (updatedAny) {
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+    saveSavedQuizzesLocally(quizzes);
   }
 
   const sections = getStoredSections().filter(s => s !== sectionName);
@@ -1895,6 +1929,25 @@ function renderLibraryQuizzesGrid() {
   if (activeSectionFilter !== 'All') {
     quizzes = allQuizzes.filter(q => (q.section || 'General') === activeSectionFilter);
   }
+
+  // SORT BY HEADING / TITLE (A-Z by default as requested, or user chosen sort)
+  const sortMode = librarySortSelect ? librarySortSelect.value : 'title_asc';
+  quizzes.sort((a, b) => {
+    const titleA = (a.title || '').trim();
+    const titleB = (b.title || '').trim();
+    if (sortMode === 'title_asc') {
+      return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (sortMode === 'title_desc') {
+      return titleB.localeCompare(titleA, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (sortMode === 'newest') {
+      return (b.updated_at || b.id || 0) - (a.updated_at || a.id || 0);
+    } else if (sortMode === 'questions') {
+      const qA = a.total_questions || (a.questions ? a.questions.length : 0);
+      const qB = b.total_questions || (b.questions ? b.questions.length : 0);
+      return qB - qA;
+    }
+    return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   libraryQuizzesGrid.innerHTML = '';
 
@@ -1928,6 +1981,9 @@ function renderLibraryQuizzesGrid() {
               <span class="text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1" title="6-Digit Share PIN">
                 <i class="fa-solid fa-key text-[9px]"></i> ${quiz.code || quiz.share_code}
               </span>
+              <span class="text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1" title="Backed up on MongoDB Cloud">
+                <i class="fa-solid fa-cloud-check text-[9px]"></i> MongoDB
+              </span>
             ` : ''}
           </div>
           <span class="text-[11px] text-slate-500">${quiz.savedAt}</span>
@@ -1960,10 +2016,17 @@ function renderLibraryQuizzesGrid() {
 
           <!-- Floating Dropdown Menu -->
           <div id="card-menu-dropdown-${quiz.id}" class="hidden card-menu-dropdown absolute right-0 bottom-full mb-2 w-48 bg-surface-950 border border-surface-750 rounded-2xl shadow-2xl p-1.5 z-30 space-y-0.5 backdrop-blur-xl">
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer push-single-mongo-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-cloud-arrow-up text-emerald-400 w-4"></i>
-              <span>Push to MongoDB</span>
-            </button>
+            ${(quiz.code || quiz.share_code) ? `
+              <div class="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-400/90 bg-emerald-500/10 rounded-xl flex items-center gap-2 cursor-default">
+                <i class="fa-solid fa-cloud-check text-emerald-400 w-4"></i>
+                <span>Already on MongoDB</span>
+              </div>
+            ` : `
+              <button class="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer push-single-mongo-btn" data-id="${quiz.id}">
+                <i class="fa-solid fa-cloud-arrow-up text-emerald-400 w-4"></i>
+                <span>Push to MongoDB</span>
+              </button>
+            `}
             <button class="w-full text-left px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}">
               <i class="fa-solid fa-key text-amber-400 w-4"></i>
               <span>Copy Quiz Code</span>
@@ -2173,7 +2236,7 @@ function saveQuizCustomizationFromModal() {
     if (existingIdx !== -1) {
       quizzes[existingIdx].title = newTitle;
       quizzes[existingIdx].section = newSection;
-      localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+      saveSavedQuizzesLocally(quizzes);
       renderLibrarySections();
       renderLibraryQuizzesGrid();
     }
@@ -2198,7 +2261,7 @@ function saveQuizCustomizationFromModal() {
     if (quiz) {
       quiz.title = newTitle;
       quiz.section = newSection;
-      localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+      saveSavedQuizzesLocally(quizzes);
 
       if (currentQuizData && (currentQuizData.id === quiz.id || currentQuizData.storageId === quiz.id)) {
         currentQuizData.title = newTitle;
@@ -2263,7 +2326,7 @@ async function autoSaveQuiz(quizData, options = {}) {
     savedList.unshift(quizRecord);
   }
 
-  localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+  saveSavedQuizzesLocally(savedList);
   updateSavedQuizBadge();
   renderLibrarySections();
   renderLibraryQuizzesGrid();
@@ -2292,7 +2355,7 @@ async function autoSaveQuiz(quizData, options = {}) {
       if (idx !== -1) {
         savedList[idx].code = data.code;
         savedList[idx].share_code = data.code;
-        localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
+        saveSavedQuizzesLocally(savedList);
       }
 
       renderLibraryQuizzesGrid();
@@ -2381,21 +2444,26 @@ async function handlePushActiveQuizToMongo() {
     quizRecord.code = code;
     quizRecord.share_code = code;
 
-    // Persist into localStorage
-    const savedList = getSavedQuizzes();
-    const existingIndex = savedList.findIndex(s => s.id === storageId || s.code === code);
-    if (existingIndex !== -1) {
-      savedList[existingIndex] = { ...savedList[existingIndex], ...quizRecord };
-    } else {
-      savedList.unshift(quizRecord);
+    // Safely persist into localStorage without letting browser quota errors abort the cloud success
+    try {
+      const savedList = getSavedQuizzes();
+      const existingIndex = savedList.findIndex(s => s.id === storageId || s.code === code);
+      if (existingIndex !== -1) {
+        savedList[existingIndex] = { ...savedList[existingIndex], ...quizRecord };
+      } else {
+        savedList.unshift(quizRecord);
+      }
+      saveSavedQuizzesLocally(savedList);
+    } catch (storageErr) {
+      console.warn('[LocalStorage update warning]:', storageErr);
     }
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(savedList));
 
     renderLibrarySections();
     renderLibraryQuizzesGrid();
     updateSavedQuizBadge();
     updateCloudCount();
     updateAutoSaveUI('saved_cloud', code);
+    updatePushActiveQuizButtonState();
 
     // Auto-copy short code
     try {
@@ -2403,13 +2471,14 @@ async function handlePushActiveQuizToMongo() {
     } catch (_) {}
 
     showToast(`🎉 Quiz saved to MongoDB [DB: ${dbTarget}]! Code: [${code}] copied to clipboard!`, 'success');
-    if (pushActiveQuizLabel) pushActiveQuizLabel.innerHTML = `<i class="fa-solid fa-check text-xs mr-1"></i> Code: ${code}`;
   } catch (err) {
     console.error('Push to MongoDB failed:', err);
     showToast(`❌ MongoDB Save Failed: ${err.message}`, 'error');
-    if (pushActiveQuizLabel) pushActiveQuizLabel.textContent = 'Push to MongoDB';
+    updatePushActiveQuizButtonState();
   } finally {
-    if (pushActiveQuizMongoBtn) pushActiveQuizMongoBtn.disabled = false;
+    if (pushActiveQuizMongoBtn && (!currentQuizData?.code && !currentQuizData?.share_code)) {
+      pushActiveQuizMongoBtn.disabled = false;
+    }
   }
 }
 
@@ -2455,11 +2524,16 @@ async function handlePushAllQuizzesToMongo() {
       }
     });
 
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(allQuizzes));
+    try {
+      saveSavedQuizzesLocally(allQuizzes);
+    } catch (e) {
+      console.warn('Quota safe save fallback:', e);
+    }
     renderLibrarySections();
     renderLibraryQuizzesGrid();
     updateSavedQuizBadge();
     updateCloudCount();
+    updatePushActiveQuizButtonState();
 
     const dbTarget = data.database || 'yt_transcript';
     showToast(`🎉 Successfully pushed ${data.saved_count} quizzes to MongoDB [DB: ${dbTarget}]! All codes are live.`, 'success');
@@ -2496,9 +2570,16 @@ async function handlePushSingleQuizToMongo(quizId) {
 
     quiz.code = data.code;
     quiz.share_code = data.code;
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(allQuizzes));
+    try {
+      saveSavedQuizzesLocally(allQuizzes);
+    } catch (_) {}
     renderLibraryQuizzesGrid();
     updateCloudCount();
+    if (currentQuizData && currentQuizData.id === quizId) {
+      currentQuizData.code = data.code;
+      currentQuizData.share_code = data.code;
+      updatePushActiveQuizButtonState();
+    }
 
     try {
       await navigator.clipboard.writeText(data.code);
@@ -2520,15 +2601,80 @@ function getSavedQuizzes() {
   }
 }
 
+function saveSavedQuizzesLocally(quizzesList) {
+  if (!Array.isArray(quizzesList)) return false;
+  try {
+    localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzesList));
+    return true;
+  } catch (err) {
+    console.warn('[LocalStorage Quota] Could not save full list, attempting safe pruning:', err);
+    try {
+      // Safe Pruning: Strip heavy question arrays from older quizzes beyond the 8 most recent ones.
+      // Keeps id, title, section, score, savedAt, total_questions, and 6-digit code intact.
+      const pruned = quizzesList.map((q, idx) => {
+        if (idx >= 8 && q.questions && q.questions.length > 5 && (q.code || q.share_code)) {
+          const stub = { ...q };
+          delete stub.questions;
+          stub.is_cloud_stub = true;
+          return stub;
+        }
+        return q;
+      });
+      localStorage.setItem('yt_saved_quizzes', JSON.stringify(pruned));
+      return true;
+    } catch (err2) {
+      try {
+        localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzesList.slice(0, 5)));
+        return true;
+      } catch (err3) {
+        console.error('[LocalStorage Quota Critical] Storage full:', err3);
+        return false;
+      }
+    }
+  }
+}
+
+function updatePushActiveQuizButtonState() {
+  if (!pushActiveQuizMongoBtn || !pushActiveQuizLabel) return;
+  const code = currentQuizData?.code || currentQuizData?.share_code;
+  if (code && String(code).length >= 4) {
+    pushActiveQuizMongoBtn.disabled = true;
+    pushActiveQuizMongoBtn.className = "px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-default shadow-sm";
+    pushActiveQuizLabel.innerHTML = `<i class="fa-solid fa-cloud-check text-xs"></i> Synced to MongoDB [PIN: ${code}]`;
+    pushActiveQuizMongoBtn.title = `This quiz is already stored in MongoDB with PIN: ${code}`;
+  } else {
+    pushActiveQuizMongoBtn.disabled = false;
+    pushActiveQuizMongoBtn.className = "px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer";
+    pushActiveQuizLabel.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-xs mr-1"></i> Push to MongoDB`;
+    pushActiveQuizMongoBtn.title = "Directly push and save this quiz to MongoDB";
+  }
+}
+
 function updateSavedQuizBadge() {
   const count = getSavedQuizzes().length;
   if (savedQuizBadge) savedQuizBadge.textContent = count;
 }
 
-function loadSavedQuiz(quizId) {
+async function loadSavedQuiz(quizId) {
   const quizzes = getSavedQuizzes();
   const quiz = quizzes.find(q => q.id === quizId);
   if (!quiz) return;
+
+  // If this quiz was pruned to save browser quota, fetch full questions from MongoDB
+  if (quiz.is_cloud_stub && (!quiz.questions || quiz.questions.length === 0) && (quiz.code || quiz.share_code)) {
+    const code = quiz.code || quiz.share_code;
+    showToast(`Loading complete quiz [${code}] from MongoDB...`, 'info');
+    try {
+      const res = await fetch(`/api/quiz/shared/${code}`);
+      if (res.ok) {
+        const fullQuiz = await res.json();
+        Object.assign(quiz, fullQuiz);
+        quiz.is_cloud_stub = false;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch full cloud quiz for stub:', e);
+    }
+  }
 
   currentQuizData = quiz;
   currentQuizData.storageId = quiz.id;
@@ -2542,6 +2688,7 @@ function loadSavedQuiz(quizId) {
   // Switch to Quiz Arena Page and launch immediately!
   switchPage('quiz');
   resetCurrentQuiz();
+  updatePushActiveQuizButtonState();
   showToast(`Loaded "${quiz.title}"! Ready to practice.`, 'success');
 }
 
@@ -2554,7 +2701,7 @@ function deleteSavedQuiz(quizId) {
   }
 
   let quizzes = getSavedQuizzes().filter(q => q.id !== quizId);
-  localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzes));
+  saveSavedQuizzesLocally(quizzes);
   updateSavedQuizBadge();
   renderLibrarySections();
   renderLibraryQuizzesGrid();
@@ -2860,6 +3007,189 @@ async function handleExecuteImportCode() {
       submitImportCodeBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-xs"></i> <span>Import & Start Quiz</span>';
     }
   }
+}
+
+let mongoCatalogQuizzes = [];
+
+async function fetchAndRenderMongoCatalog(searchFilter = '') {
+  if (!mongoCatalogList) return;
+  mongoCatalogList.innerHTML = `
+    <div class="text-center py-16 text-slate-400 text-xs">
+      <i class="fa-solid fa-spinner animate-spin text-xl mb-2 text-cyan-400 block"></i>
+      Fetching quizzes from MongoDB Cloud (yt_transcript)...
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/api/quiz/cloud_catalog');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Failed to load MongoDB directory');
+    }
+    const data = await res.json();
+    mongoCatalogQuizzes = data.quizzes || [];
+
+    renderMongoCatalogItems(searchFilter);
+  } catch (err) {
+    mongoCatalogList.innerHTML = `
+      <div class="text-center py-12 bg-surface-950 border border-surface-800 rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto mb-2 text-lg">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h4 class="font-bold text-white text-xs">Failed to connect to MongoDB Directory</h4>
+        <p class="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">${escapeHtml(err.message)}</p>
+        <button id="retry-mongo-catalog-btn" class="mt-3 px-3 py-1 bg-surface-800 hover:bg-surface-750 text-cyan-300 rounded-lg text-xs font-semibold">
+          Try Again
+        </button>
+      </div>
+    `;
+    const retryBtn = document.getElementById('retry-mongo-catalog-btn');
+    if (retryBtn) retryBtn.addEventListener('click', () => fetchAndRenderMongoCatalog(searchFilter));
+    if (mongoCatalogCount) mongoCatalogCount.textContent = 'Connection error';
+  }
+}
+
+function renderMongoCatalogItems(searchFilter = '') {
+  if (!mongoCatalogList) return;
+  const q = (searchFilter || '').trim().toLowerCase();
+  let filtered = mongoCatalogQuizzes;
+
+  if (q) {
+    filtered = mongoCatalogQuizzes.filter(item => {
+      const title = (item.title || '').toLowerCase();
+      const code = (item.code || '').toLowerCase();
+      const section = (item.section || '').toLowerCase();
+      return title.includes(q) || code.includes(q) || section.includes(q);
+    });
+  }
+
+  // Sort catalog alphabetically by Heading / Title by default!
+  filtered.sort((a, b) => (a.title || '').trim().localeCompare((b.title || '').trim(), undefined, { numeric: true, sensitivity: 'base' }));
+
+  if (mongoCatalogCount) {
+    mongoCatalogCount.textContent = `Showing ${filtered.length} of ${mongoCatalogQuizzes.length} MongoDB quizzes`;
+  }
+
+  if (filtered.length === 0) {
+    mongoCatalogList.innerHTML = `
+      <div class="text-center py-12 bg-surface-950 border border-surface-800 rounded-2xl p-6">
+        <i class="fa-solid fa-magnifying-glass text-slate-500 text-lg mb-2 block"></i>
+        <p class="text-xs text-slate-300 font-semibold">No quizzes found matching "${escapeHtml(searchFilter)}"</p>
+        <p class="text-[11px] text-slate-500 mt-1">Try another search term or refresh the catalog.</p>
+      </div>
+    `;
+    return;
+  }
+
+  mongoCatalogList.innerHTML = '';
+  filtered.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'p-3.5 rounded-2xl bg-surface-950/80 border border-surface-800 hover:border-surface-700 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
+    
+    card.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1 flex-wrap">
+          <span class="px-2 py-0.5 rounded-full bg-surface-800 border border-surface-700 text-slate-300 text-[10px] font-semibold">
+            ${item.total_questions || 0} MCQs
+          </span>
+          <span class="px-2 py-0.5 rounded-full bg-surface-800/60 border border-surface-700/60 text-slate-400 text-[10px]">
+            ${escapeHtml(item.section || 'General')}
+          </span>
+          ${item.score ? `
+            <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+              Score: ${item.score}
+            </span>
+          ` : ''}
+        </div>
+        <h4 class="font-bold text-white text-xs sm:text-sm line-clamp-1 leading-snug">
+          ${escapeHtml(item.title || 'Untitled Quiz')}
+        </h4>
+      </div>
+
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-surface-850 pt-2 sm:pt-0">
+        <!-- 6-Digit Code Badge with 1-click Copy -->
+        <button class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-mono font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer copy-catalog-code-btn" data-code="${item.code}" title="Click to copy 6-digit code">
+          <i class="fa-solid fa-key text-[10px] text-amber-400"></i>
+          <span>${item.code}</span>
+          <i class="fa-regular fa-copy text-[10px] text-amber-400/70 ml-0.5"></i>
+        </button>
+
+        <!-- 1-Click Launch in Arena -->
+        <button class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer open-catalog-quiz-btn" data-code="${item.code}" title="Open this quiz directly in Quiz Arena">
+          <i class="fa-solid fa-play text-[10px]"></i>
+          <span>Play Arena</span>
+        </button>
+      </div>
+    `;
+
+    mongoCatalogList.appendChild(card);
+  });
+
+  // Attach event handlers
+  mongoCatalogList.querySelectorAll('.copy-catalog-code-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const code = btn.dataset.code;
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast(`PIN Code [${code}] copied to clipboard!`, 'success');
+      } catch (_) {
+        showToast(`Code: ${code}`, 'info');
+      }
+    });
+  });
+
+  mongoCatalogList.querySelectorAll('.open-catalog-quiz-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.code;
+      closeMongoCatalogModal();
+      showToast(`Loading quiz [${code}] from MongoDB...`, 'info');
+      try {
+        const res = await fetch(`/api/quiz/shared/${code}`);
+        if (!res.ok) throw new Error('Could not fetch quiz from cloud');
+        const quiz = await res.json();
+        currentQuizData = quiz;
+        currentQuizData.storageId = quiz.id || ('quiz_' + Date.now());
+        currentQuizData.code = code;
+        currentQuizData.share_code = code;
+        
+        // Also cache locally
+        const list = getSavedQuizzes();
+        const existingIdx = list.findIndex(s => s.code === code || s.id === currentQuizData.storageId);
+        if (existingIdx !== -1) {
+          list[existingIdx] = { ...list[existingIdx], ...currentQuizData };
+        } else {
+          list.unshift(currentQuizData);
+        }
+        saveSavedQuizzesLocally(list);
+        renderLibrarySections();
+        renderLibraryQuizzesGrid();
+        updateSavedQuizBadge();
+        updateCloudCount();
+
+        switchPage('quiz');
+        resetCurrentQuiz();
+        updatePushActiveQuizButtonState();
+        showToast(`🎉 Opened "${quiz.title}" in Quiz Arena!`, 'success');
+      } catch (err) {
+        showToast(`Failed to open quiz: ${err.message}`, 'error');
+      }
+    });
+  });
+}
+
+function openMongoCatalogModal() {
+  if (!mongoCatalogModal) return;
+  mongoCatalogModal.classList.remove('hidden');
+  mongoCatalogModal.classList.add('flex');
+  if (mongoCatalogSearch) mongoCatalogSearch.value = '';
+  fetchAndRenderMongoCatalog();
+}
+
+function closeMongoCatalogModal() {
+  if (!mongoCatalogModal) return;
+  mongoCatalogModal.classList.add('hidden');
+  mongoCatalogModal.classList.remove('flex');
 }
 
 function checkUrlSharedQuiz() {
@@ -3197,7 +3527,7 @@ async function syncQuizzesWithCloud(silent = false) {
       }
     });
 
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(merged));
+    saveSavedQuizzesLocally(merged);
     updateSavedQuizBadge();
     renderLibrarySections();
     renderLibraryQuizzesGrid();
@@ -3216,7 +3546,7 @@ async function syncQuizzesWithCloud(silent = false) {
           if (savedRes && savedRes.code) {
             lq.code = savedRes.code;
             lq.share_code = savedRes.code;
-            localStorage.setItem('yt_saved_quizzes', JSON.stringify(merged));
+            saveSavedQuizzesLocally(merged);
             renderLibraryQuizzesGrid();
           }
         }).catch(() => {});

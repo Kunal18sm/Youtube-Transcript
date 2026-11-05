@@ -1397,6 +1397,27 @@ def share_quiz_endpoint(quiz: Dict[str, Any]):
         "total_questions": len(quiz_data.get("questions", []))
     }
 
+@app.get("/api/quiz/cloud_catalog")
+def get_cloud_catalog():
+    get_mongo()
+    if _mongo_client is None:
+        raise HTTPException(status_code=503, detail="MongoDB is currently offline or unreachable.")
+    try:
+        col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+        cursor = col.find(
+            {},
+            {"code": 1, "title": 1, "section": 1, "total_questions": 1, "updated_at": 1, "savedAt": 1, "score": 1, "username": 1, "_id": 0}
+        ).sort("updated_at", -1)
+        quizzes = list(cursor)
+        return {
+            "success": True,
+            "total": len(quizzes),
+            "database": TARGET_DB_NAME,
+            "quizzes": quizzes
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch cloud catalog: {e}")
+
 @app.get("/api/quiz/shared/{code}")
 def get_shared_quiz_endpoint(code: str):
     clean_code = sanitize_code(code)

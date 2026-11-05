@@ -308,26 +308,34 @@ def generate_chunk_mcqs(
     High-Yield Academic Question Formulation:
     Extracts up to target_count diverse, syllabus-aligned MCQs directly from lecture transcript facts.
     """
-    prompt = f"""You are a Senior University Professor and Exam Board Controller (UPSC / State PSC / GATE / SSC / Academic standards).
-Analyze this lecture segment thoroughly and create {target_count} rigorous, diverse Multiple Choice Questions (MCQs).
+    prompt = f"""You are a Senior Question Paper Setter and Exam Controller for Staff Selection Commission (SSC CGL & SSC CHSL) and State Civil Services Examinations.
+Analyze this lecture segment thoroughly and create {target_count} rigorous, authentic Multiple Choice Questions (MCQs) strictly conforming to SSC CGL / CHSL General Awareness (GS/GK) exam patterns.
 
-EXAM RULES & GUIDELINES:
-1. COMPREHENSIVE CONCEPT & FACT EXTRACTION:
-   - Formulate questions from every single fact, term, definition, historical event, scientific law, date, location, key figure, classification, difference, tool, site, example, and cause/effect taught in this segment.
-   - Do NOT stop early: aim to provide all {target_count} questions.
-   - FORBIDDEN: Do NOT ask questions about greetings ("welcome", "namaste"), subscribe buttons, audio tests, or batch sales.
-2. DIVERSE QUESTION TYPES:
-   - Mix question formats: Direct factual, conceptual, "Which of the following is correct/incorrect", chronological order, and statement-based questions.
-   - Each question in this segment must test a different angle, concept, or detail.
+CRITICAL EXAM RULES & INSTRUCTIONS:
+1. STRICT ENGLISH LANGUAGE MANDATE (NO HINDI / HINGLISH):
+   - EVERY single question, all 4 options, and explanations MUST be written in 100% standard, professional, grammatically flawless ENGLISH.
+   - Even if the input lecture transcript is spoken in Hindi, Hinglish, or mixed conversational slang, you MUST translate and formulate everything into formal English.
+   - NEVER output Devanagari script or Romanized Hindi in questions or options (except legitimate historical/geographical proper nouns like 'Mehrgarh', 'Bhimbetka', 'Ashoka').
+
+2. AUTHENTIC SSC CGL / CHSL QUESTION STYLES:
+   - Formulate questions testing high-yield exam facts, dates, sites, terms, definitions, scientific principles, rulers, acts, geographical features, and key concepts taught in the lecture.
+   - Use standard SSC exam question patterns:
+     * Direct factual questions ("Which of the following is known as...?")
+     * Analytical questions ("Which of the following statements is INCORRECT regarding...?")
+     * Association questions ("With reference to the Stone Age, the term 'Microliths' represents...?")
+     * Chronological or classification questions ("Which phase is characterized by...?")
+   - FORBIDDEN: NEVER ask conversational filler questions (greetings, channel subscriptions, mic tests, or coaching announcements).
+
 3. RIGOROUS 4-OPTION STRUCTURE:
-   - Exactly 4 options labeled ["A) ...", "B) ...", "C) ...", "D) ..."].
-   - Exactly ONE option is unambiguously correct.
-   - 3 realistic, plausible academic distractors.
-   - "correct_answer": Must be the exact letter ("A", "B", "C", or "D") matching the correct option.
-4. EVIDENCE & EXPLANATION:
-   - "explanation": Concise 1-2 sentence academic explanation.
-   - "verified_fact": The factual truth or lecture point confirming this answer.
-   - "timestamp": Approximate timestamp (e.g., "12:45") from the lecture.
+   - Exactly 4 realistic, distinct options labeled ["A) ...", "B) ...", "C) ...", "D) ..."].
+   - Exactly ONE option is unambiguously correct according to the lecture facts.
+   - 3 plausible, high-quality exam distractors (avoid silly or obvious fake choices).
+   - "correct_answer": Must be the single capital letter ("A", "B", "C", or "D") of the right option.
+
+4. ACADEMIC EVIDENCE & EXPLANATION:
+   - "explanation": Crisp 1-2 sentence solution explaining why the correct option is right, in SSC exam answer-key style.
+   - "verified_fact": The underlying factual truth from the lecture.
+   - "timestamp": Approximate lecture timestamp (e.g., "14:20").
    - "difficulty": "Easy", "Medium", or "Hard".
 
 TRANSCRIPT SEGMENT:
