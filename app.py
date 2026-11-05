@@ -811,7 +811,135 @@ def create_quiz(req: QuizRequest):
         )
         return quiz
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        err_msg = str(e)
+        if "quota" in err_msg.lower() or "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            raise HTTPException(status_code=429, detail=err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
+
+class UpdateApiKeyRequest(BaseModel):
+    api_key: str
+
+_ai_status_cache = {"data": None, "timestamp": 0}
+
+@app.get("/api/ai/status")
+def get_ai_status(refresh: bool = False):
+    global _ai_status_cache
+    now = time.time()
+    if not refresh and _ai_status_cache["data"] and (now - _ai_status_cache["timestamp"]) < 45:
+        return _ai_status_cache["data"]
+
+    from quiz_generator import get_gemini_api_keys, MODELS_TO_TRY
+    keys = get_gemini_api_keys()
+    if not keys:
+        res = {
+            "status": "no_key",
+            "quota_exhausted": True,
+            "message": "No Gemini API Key found. Please add a free key in settings."
+        }
+        _ai_status_cache = {"data": res, "timestamp": now}
+        return res
+
+    last_429_info = None
+    for k in keys:
+        for model in ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.8-flash"]:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={k}"
+            try:
+                r = requests.post(url, json={"contents": [{"parts": [{"text": "ping"}]}]}, timeout=6)
+                if r.status_code == 200:
+                    res = {
+                        "status": "active",
+                        "quota_exhausted": False,
+                        "model": model,
+                        "message": "Google Gemini AI is active and ready."
+                    }
+                    _ai_status_cache = {"data": res, "timestamp": now}
+                    return res
+                elif r.status_code == 429:
+                    d = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+                    details = d.get("error", {}).get("details", [])
+                    retry_sec = None
+                    for det in details:
+                        if det.get("@type", "").endswith("RetryInfo"):
+                            raw_del = det.get("retryDelay", "")
+                            if raw_del.endswith("s"):
+                                try:
+                                    retry_sec = int(float(raw_del[:-1]))
+                                except Exception:
+                                    pass
+
+                    human_time = "a short while"
+                    if retry_sec:
+                        mins = retry_sec // 60
+                        hours = mins // 60
+                        rem_m = mins % 60
+                        if hours > 0:
+                            human_time = f"{hours}h {rem_m}m"
+                        else:
+                            human_time = f"{mins}m"
+
+                    last_429_info = {
+                        "status": "quota_exhausted",
+                        "quota_exhausted": True,
+                        "retry_in_seconds": retry_sec,
+                        "retry_in_human": human_time,
+                        "message": f"Google Gemini Free Tier daily limit (20 calls/day) reached. Renews in ~{human_time}."
+                    }
+            except Exception:
+                pass
+
+    res = last_429_info or {
+        "status": "error",
+        "quota_exhausted": True,
+        "message": "Could not verify Gemini AI status."
+    }
+    _ai_status_cache = {"data": res, "timestamp": now}
+    return res
+
+@app.post("/api/ai/update_key")
+def update_gemini_api_key(req: UpdateApiKeyRequest):
+    global _ai_status_cache
+    new_key = req.api_key.strip()
+    if not new_key or len(new_key) < 15:
+        raise HTTPException(status_code=400, detail="Invalid API key format. Please enter a valid Gemini API key.")
+
+    # Validate key against Gemini API before saving
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={new_key}"
+    try:
+        r = requests.post(url, json={"contents": [{"parts": [{"text": "ping"}]}]}, timeout=10)
+        if r.status_code == 400 and "API_KEY_INVALID" in r.text:
+            raise HTTPException(status_code=400, detail="Google rejected this API key: Invalid API Key. Please verify at Google AI Studio.")
+        elif r.status_code == 429:
+            raise HTTPException(status_code=400, detail="This API key has also exceeded its daily quota. Please generate a fresh key from a different Google account or project.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        pass
+
+    # Save to .env file
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    lines = []
+    found = False
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("GEMINI_API_KEY="):
+                    lines.append(f"GEMINI_API_KEY={new_key}\n")
+                    found = True
+                else:
+                    lines.append(line)
+    if not found:
+        lines.append(f"\nGEMINI_API_KEY={new_key}\n")
+
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    os.environ["GEMINI_API_KEY"] = new_key
+    _ai_status_cache = {"data": None, "timestamp": 0}
+
+    return {
+        "success": True,
+        "message": "New Gemini API Key saved and verified active! You can now generate quizzes immediately."
+    }
 
 # Serve frontend static files
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

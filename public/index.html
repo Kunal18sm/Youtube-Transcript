@@ -122,6 +122,12 @@
           <span>Install App</span>
         </button>
 
+        <!-- AI Gemini Key & Quota Manager Button -->
+        <button id="nav-api-key-btn" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 font-bold text-xs shadow-md transition-all cursor-pointer" title="Gemini AI Quota & Key Settings">
+          <i class="fa-solid fa-key text-xs text-amber-400"></i>
+          <span class="hidden md:inline">AI Quota</span>
+        </button>
+
         <!-- Cloud Auth Button (Logged Out state with live server status dot) -->
         <button id="auth-modal-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-slate-200 hover:text-white border border-surface-700 hover:border-emerald-500/50 font-bold text-xs shadow-md transition-all cursor-pointer" title="Cloud Login (Click to connect)">
           <span id="guest-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -453,6 +459,21 @@
                   class="w-full bg-surface-850 border border-surface-700 text-white rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-rose-500 placeholder:text-slate-500"
                 />
               </div>
+            </div>
+
+            <!-- Live AI Quota & Status Alert Banner -->
+            <div id="ai-quota-banner" class="hidden rounded-2xl p-3 bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                <div>
+                  <span class="font-bold text-amber-300">Google Gemini AI Quota:</span>
+                  <span id="ai-quota-text" class="text-slate-300 ml-1">Daily limit reached (Renews in ~1h 40m)</span>
+                </div>
+              </div>
+              <button id="open-api-key-modal-btn" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-[11px] flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-sm transition-all">
+                <i class="fa-solid fa-key text-[10px]"></i>
+                <span>Add Free API Key (Bypass Wait)</span>
+              </button>
             </div>
 
             <div class="flex items-center justify-center pt-2">
@@ -1056,6 +1077,81 @@
         </button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- GEMINI API KEY & QUOTA MANAGER MODAL -->
+  <!-- ============================================================== -->
+  <div id="api-key-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="bg-surface-900 border border-surface-700 w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-surface-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+            <i class="fa-solid fa-key text-xs"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Gemini API Quota Manager</h3>
+            <p class="text-[11px] text-slate-400">Manage free Google Gemini AI limits</p>
+          </div>
+        </div>
+        <button id="close-api-key-modal-btn" class="w-8 h-8 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Current Quota Info Box -->
+      <div id="modal-quota-info-box" class="p-3.5 rounded-2xl bg-surface-950 border border-surface-800 space-y-1.5 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400 font-medium">Status:</span>
+          <span id="modal-quota-status-badge" class="font-bold text-emerald-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Checking...
+          </span>
+        </div>
+        <div class="flex items-center justify-between" id="modal-quota-renew-row">
+          <span class="text-slate-400 font-medium">Daily Limit Renews In:</span>
+          <span id="modal-quota-renew-time" class="font-bold text-amber-300">--</span>
+        </div>
+      </div>
+
+      <!-- How to Get Free Key Instructions -->
+      <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs space-y-1.5">
+        <p class="font-bold text-amber-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-lightbulb"></i>
+          <span>Free Key Kaise Banayein (Instant):</span>
+        </p>
+        <p class="text-[11px] text-slate-300 leading-relaxed">
+          Google har account par 20 free requests/day deta hai. Agar quota exhaust ho gaya ho, toh kisi bhi dusre Google/Gmail account se Google AI Studio par jakar 1-click me naya free key create karein aur yahan paste karein.
+        </p>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 underline mt-0.5">
+          <span>Open Google AI Studio (Get Free Key)</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+        </a>
+      </div>
+
+      <!-- API Key Input -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-slate-300">
+          Paste New Gemini API Key:
+        </label>
+        <input 
+          type="password" 
+          id="new-gemini-key-input" 
+          placeholder="Paste API Key (AIzaSy... ya AQ...)" 
+          class="w-full bg-surface-950 border border-surface-700 text-white rounded-xl p-3 text-xs font-mono focus:outline-none focus:border-amber-500 placeholder:text-slate-600"
+        />
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex items-center gap-2 pt-1">
+        <button id="cancel-api-key-btn" class="flex-1 py-2.5 rounded-xl bg-surface-800 hover:bg-surface-750 text-slate-300 text-xs font-bold transition-all cursor-pointer">
+          Cancel
+        </button>
+        <button id="save-api-key-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-check text-xs"></i>
+          <span id="save-api-key-btn-text">Verify & Save</span>
+        </button>
+      </div>
     </div>
   </div>
 

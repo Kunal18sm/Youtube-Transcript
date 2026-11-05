@@ -227,6 +227,102 @@ let healthCheckInterval = null;
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
 
+// Gemini API Key & Quota DOM
+const navApiKeyBtn = document.getElementById('nav-api-key-btn');
+const openApiKeyModalBtn = document.getElementById('open-api-key-modal-btn');
+const apiKeyModal = document.getElementById('api-key-modal');
+const closeApiKeyModalBtn = document.getElementById('close-api-key-modal-btn');
+const cancelApiKeyBtn = document.getElementById('cancel-api-key-btn');
+const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+const saveApiKeyBtnText = document.getElementById('save-api-key-btn-text');
+const newGeminiKeyInput = document.getElementById('new-gemini-key-input');
+const aiQuotaBanner = document.getElementById('ai-quota-banner');
+const aiQuotaText = document.getElementById('ai-quota-text');
+const modalQuotaStatusBadge = document.getElementById('modal-quota-status-badge');
+const modalQuotaRenewRow = document.getElementById('modal-quota-renew-row');
+const modalQuotaRenewTime = document.getElementById('modal-quota-renew-time');
+
+let latestAiQuotaInfo = null;
+
+async function checkAiQuotaStatus(refresh = false) {
+  try {
+    const res = await fetch(`/api/ai/status?refresh=${refresh}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    latestAiQuotaInfo = data;
+
+    if (data.quota_exhausted) {
+      if (aiQuotaBanner) aiQuotaBanner.classList.remove('hidden');
+      if (aiQuotaText) {
+        aiQuotaText.textContent = data.retry_in_human ? `Daily limit reached (Renews in ~${data.retry_in_human})` : 'Daily limit reached';
+      }
+      if (modalQuotaStatusBadge) {
+        modalQuotaStatusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> <span class="text-rose-400">Quota Exhausted</span>`;
+      }
+      if (modalQuotaRenewRow) modalQuotaRenewRow.classList.remove('hidden');
+      if (modalQuotaRenewTime) modalQuotaRenewTime.textContent = data.retry_in_human ? `~${data.retry_in_human}` : 'Soon';
+    } else {
+      if (aiQuotaBanner) aiQuotaBanner.classList.add('hidden');
+      if (modalQuotaStatusBadge) {
+        modalQuotaStatusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> <span class="text-emerald-400">Active & Ready</span>`;
+      }
+      if (modalQuotaRenewRow) modalQuotaRenewRow.classList.add('hidden');
+    }
+  } catch (err) {
+    console.warn('[AI Quota check warning]:', err);
+  }
+}
+
+function openApiKeyModal() {
+  if (apiKeyModal) {
+    apiKeyModal.classList.remove('hidden');
+    if (newGeminiKeyInput) {
+      newGeminiKeyInput.value = '';
+      setTimeout(() => newGeminiKeyInput.focus(), 100);
+    }
+    checkAiQuotaStatus(true);
+  }
+}
+
+function closeApiKeyModal() {
+  if (apiKeyModal) apiKeyModal.classList.add('hidden');
+}
+
+async function handleSaveApiKey() {
+  if (!newGeminiKeyInput || !saveApiKeyBtn) return;
+  const keyVal = newGeminiKeyInput.value.trim();
+  if (!keyVal) {
+    showToast('Please paste a Gemini API Key!', 'error');
+    newGeminiKeyInput.focus();
+    return;
+  }
+
+  saveApiKeyBtn.disabled = true;
+  if (saveApiKeyBtnText) saveApiKeyBtnText.textContent = 'Verifying...';
+
+  try {
+    const res = await fetch('/api/ai/update_key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: keyVal })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to verify key');
+    }
+
+    showToast('🎉 ' + data.message, 'success');
+    closeApiKeyModal();
+    checkAiQuotaStatus(true);
+  } catch (err) {
+    showToast(`❌ ${err.message}`, 'error');
+  } finally {
+    saveApiKeyBtn.disabled = false;
+    if (saveApiKeyBtnText) saveApiKeyBtnText.textContent = 'Verify & Save';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   updateAuthUI();
@@ -238,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNetworkListeners();
   startServerHealthMonitor();
   checkUrlSharedQuiz();
+  checkAiQuotaStatus();
 });
 
 // ----------------------------------------------------
@@ -744,6 +841,18 @@ function setupEventListeners() {
   // 6-Digit Share Modal Listeners
   if (closeExportCodeModalBtn) closeExportCodeModalBtn.addEventListener('click', closeQuizCodeModal);
   if (closeExportCodeBtn) closeExportCodeBtn.addEventListener('click', closeQuizCodeModal);
+
+  // Gemini API Key & Quota Modal Listeners
+  if (navApiKeyBtn) navApiKeyBtn.addEventListener('click', openApiKeyModal);
+  if (openApiKeyModalBtn) openApiKeyModalBtn.addEventListener('click', openApiKeyModal);
+  if (closeApiKeyModalBtn) closeApiKeyModalBtn.addEventListener('click', closeApiKeyModal);
+  if (cancelApiKeyBtn) cancelApiKeyBtn.addEventListener('click', closeApiKeyModal);
+  if (saveApiKeyBtn) saveApiKeyBtn.addEventListener('click', handleSaveApiKey);
+  if (apiKeyModal) {
+    apiKeyModal.addEventListener('click', (e) => {
+      if (e.target === apiKeyModal) closeApiKeyModal();
+    });
+  }
   if (copySharePinBtn) {
     copySharePinBtn.addEventListener('click', () => {
       const pin = sharePinDisplay ? sharePinDisplay.textContent.trim() : '';
@@ -1281,7 +1390,13 @@ async function handleGenerateQuiz() {
     });
   } catch (err) {
     progressTracker.stop();
-    showToast(`Error: ${err.message}`, 'error');
+    const errMsg = err.message || '';
+    if (errMsg.toLowerCase().includes('quota') || errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+      showToast(`⚠️ Gemini AI Daily Quota Limit Reached! Renews in ${latestAiQuotaInfo?.retry_in_human || 'a while'}. Add a free key to bypass.`, 'error');
+      openApiKeyModal();
+    } else {
+      showToast(`Error: ${errMsg}`, 'error');
+    }
   } finally {
     progressTracker.stop();
     generateQuizBtn.disabled = false;
