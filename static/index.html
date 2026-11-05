@@ -76,14 +76,8 @@
           <i class="fa-brands fa-youtube text-lg sm:text-xl text-white"></i>
         </div>
         <div class="flex items-center gap-2 sm:gap-2.5">
-          <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+          <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
             <span>YT Transcript <span class="text-rose-500">Pro</span></span>
-
-            <!-- Live Server Status Indicator (Only Green or Red Dot) -->
-            <button id="server-status-pill" class="relative flex items-center justify-center p-1 rounded-full cursor-pointer hover:scale-125 transition-transform" title="Server: Online (Click to test)">
-              <span id="server-status-ping" class="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75"></span>
-              <span id="server-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30"></span>
-            </button>
           </h1>
         </div>
       </div>
@@ -116,16 +110,16 @@
           <span>Install App</span>
         </button>
 
-        <!-- Cloud Auth Button (Logged Out state) -->
-        <button id="auth-modal-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-slate-200 hover:text-white border border-surface-700 hover:border-emerald-500/50 font-bold text-xs shadow-md transition-all cursor-pointer">
-          <i class="fa-solid fa-cloud text-xs text-emerald-400"></i>
+        <!-- Cloud Auth Button (Logged Out state with live server status dot) -->
+        <button id="auth-modal-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-slate-200 hover:text-white border border-surface-700 hover:border-emerald-500/50 font-bold text-xs shadow-md transition-all cursor-pointer" title="Cloud Login (Click to connect)">
+          <span id="guest-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
           <span>Cloud Login</span>
         </button>
 
-        <!-- User Profile Pill & Dropdown (Logged In state) -->
+        <!-- User Profile Pill & Dropdown (Logged In state with live server status dot) -->
         <div id="user-profile-pill" class="hidden relative">
-          <button id="user-profile-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-white border border-emerald-500/40 font-bold text-xs shadow-md transition-all cursor-pointer">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <button id="user-profile-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-surface-850 hover:bg-surface-800 text-white border border-emerald-500/40 font-bold text-xs shadow-md transition-all cursor-pointer" title="User Profile">
+            <span id="user-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span id="user-profile-name" class="max-w-[70px] sm:max-w-[110px] truncate text-emerald-300 font-bold">User</span>
             <i class="fa-solid fa-chevron-down text-[9px] text-slate-400"></i>
           </button>
@@ -520,75 +514,82 @@
         <!-- Quiz Arena Player (When Quiz is Active) -->
         <div id="quiz-player-card" class="hidden space-y-4">
           
-          <!-- Sticky Header Control Bar -->
-          <div class="bg-surface-900 border border-surface-800 rounded-2xl p-4 shadow-xl backdrop-blur-xl flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 id="active-quiz-title" class="font-extrabold text-white text-sm sm:text-base cursor-pointer hover:text-rose-400 transition-colors flex items-center gap-1.5" title="Click to rename quiz">Video Quiz</h3>
-                <button id="edit-active-quiz-title-btn" class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-surface-800 transition-colors cursor-pointer" title="Rename Quiz Title & Folder">
-                  <i class="fa-solid fa-pen-to-square text-xs"></i>
-                </button>
-                <span id="active-quiz-section-badge" class="text-[10px] bg-surface-800 text-slate-300 border border-surface-700 px-2 py-0.5 rounded-full font-bold">General</span>
+          <!-- Compact Single-Line Sticky Header Control Bar with Collapsible Options Drawer -->
+          <div class="bg-surface-900 border border-surface-800 rounded-2xl p-2.5 sm:p-3 shadow-xl backdrop-blur-xl">
+            <!-- Line 1: Main Slim Single Line -->
+            <div class="flex items-center justify-between gap-2">
+              <!-- Left: Title, Section & Live Stats -->
+              <div class="flex items-center gap-2 min-w-0">
+                <h3 id="active-quiz-title" class="font-extrabold text-white text-xs sm:text-sm truncate cursor-pointer hover:text-rose-400 transition-colors" title="Click to rename quiz">Video Quiz</h3>
+                <span id="active-quiz-section-badge" class="hidden sm:inline-block text-[10px] bg-surface-800 text-slate-300 border border-surface-700 px-2 py-0.5 rounded-full font-bold shrink-0">General</span>
+                <span class="text-slate-600 text-xs hidden sm:inline">•</span>
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-400 shrink-0">
+                  <span id="quiz-q-progress">0 of 0</span>
+                  <span class="text-emerald-400 font-bold ml-1"><i class="fa-solid fa-check text-[10px] mr-0.5"></i><span id="quiz-score-correct">0</span></span>
+                  <span class="text-rose-400 font-bold"><i class="fa-solid fa-xmark text-[10px] mr-0.5"></i><span id="quiz-score-wrong">0</span></span>
+                </div>
               </div>
-              <div class="flex items-center gap-2.5 text-xs text-slate-400 mt-0.5">
-                <span id="quiz-q-progress">0 of 0 Answered</span>
-                <span>•</span>
-                <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i><span id="quiz-score-correct">0</span></span>
-                <span>•</span>
-                <span class="text-rose-400 font-semibold"><i class="fa-solid fa-circle-xmark mr-1"></i><span id="quiz-score-wrong">0</span></span>
+
+              <!-- Right: Focus Mode + Options Arrow Toggle -->
+              <div class="flex items-center gap-1.5 shrink-0">
+                <!-- View Mode Toggle: 1-by-1 Focus vs All Questions -->
+                <div class="inline-flex items-center p-0.5 bg-surface-950 border border-surface-800 rounded-lg">
+                  <button id="view-mode-single-btn" class="px-2 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer text-white bg-rose-600 shadow-sm" title="Single Question Focus">
+                    <i class="fa-solid fa-square-check text-[10px]"></i>
+                    <span class="hidden md:inline">Focus</span>
+                  </button>
+                  <button id="view-mode-all-btn" class="px-2 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer text-slate-400 hover:text-white" title="All Questions View">
+                    <i class="fa-solid fa-list-ol text-[10px]"></i>
+                    <span class="hidden md:inline">All</span>
+                  </button>
+                </div>
+
+                <!-- Arrow Toggle for Detailed Options Drawer -->
+                <button id="toggle-quiz-details-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm" title="More Quiz Options & Actions">
+                  <span class="text-[11px]">Options</span>
+                  <i id="quiz-details-arrow-icon" class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200"></i>
+                </button>
               </div>
             </div>
 
-            <!-- Quiz Arena Action Buttons -->
-            <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
-              
-              <!-- View Mode Toggle: 1-by-1 Focus vs All Questions -->
-              <div class="inline-flex items-center p-0.5 bg-surface-950 border border-surface-800 rounded-xl" title="Switch between 1 question per page or all questions scrollable">
-                <button id="view-mode-single-btn" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-white bg-rose-600 shadow-sm">
-                  <i class="fa-solid fa-square-check text-xs"></i>
-                  <span>1-by-1 Focus</span>
-                </button>
-                <button id="view-mode-all-btn" class="px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-white">
-                  <i class="fa-solid fa-list-ol text-xs"></i>
-                  <span>All Questions</span>
-                </button>
-              </div>
-
-              <!-- 1-Click Copy Full Quiz Code (Share with other devices) -->
-              <button id="share-quiz-code-btn" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-surface-800 hover:from-amber-500/30 hover:to-surface-750 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-sm transition-all" title="Get full lengthy code to copy or use on another device">
-                <i class="fa-solid fa-key text-xs text-amber-400"></i>
-                <span>Copy Quiz Code</span>
+            <!-- Expandable Drawer for Extra Actions (Hidden by default, expands on clicking arrow) -->
+            <div id="quiz-details-drawer" class="hidden mt-2.5 pt-2.5 border-t border-surface-800 flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <button id="edit-active-quiz-title-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-700 text-slate-300 rounded-lg text-[11px] font-medium border border-surface-700 cursor-pointer flex items-center gap-1">
+                <i class="fa-solid fa-pen-to-square text-[10px] text-rose-400"></i>
+                <span>Rename</span>
               </button>
 
-              <!-- 1-Click Push This Active Quiz to MongoDB -->
-              <button id="push-active-quiz-mongo-btn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Directly push and save this quiz to MongoDB database so others can access it via code">
-                <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
-                <span id="push-active-quiz-label">Push to MongoDB</span>
+              <button id="share-quiz-code-btn" class="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 rounded-lg text-[11px] font-bold cursor-pointer flex items-center gap-1 shadow-sm">
+                <i class="fa-solid fa-key text-[10px] text-amber-400"></i>
+                <span>Copy Code</span>
               </button>
 
-              <!-- Global Hindi / English Toggle -->
-              <button id="toggle-all-hindi-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-language text-xs text-rose-400"></i>
+              <button id="push-active-quiz-mongo-btn" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-cloud-arrow-up text-[10px]"></i>
+                <span id="push-active-quiz-label">Push to Mongo</span>
+              </button>
+
+              <button id="toggle-all-hindi-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-lg text-[11px] font-medium cursor-pointer flex items-center gap-1">
+                <i class="fa-solid fa-language text-[10px] text-rose-400"></i>
                 <span id="global-lang-label">All in Hindi</span>
               </button>
 
-              <!-- Auto-Saved Cloud & Local Status Badge -->
-              <div id="quiz-autosave-badge" class="px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm" title="Auto-saved to Cloud & Offline Storage">
-                <i id="quiz-autosave-icon" class="fa-solid fa-cloud-arrow-up text-[11px] text-emerald-400"></i>
+              <div id="quiz-autosave-badge" class="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-lg text-[10px] font-medium flex items-center gap-1 shadow-sm">
+                <i id="quiz-autosave-icon" class="fa-solid fa-cloud-check text-[10px] text-emerald-400"></i>
                 <span id="quiz-autosave-label">Auto-Saved</span>
               </div>
 
-              <button id="download-quiz-text-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5" title="Download Printable Worksheet">
-                <i class="fa-solid fa-download text-xs text-rose-400"></i>
+              <button id="download-quiz-text-btn" class="px-2.5 py-1 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-lg text-[11px] font-medium cursor-pointer flex items-center gap-1" title="Download Printable Worksheet">
+                <i class="fa-solid fa-download text-[10px] text-rose-400"></i>
                 <span>Worksheet</span>
               </button>
 
-              <button id="download-quiz-json-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer" title="Download JSON">
-                <i class="fa-solid fa-code text-xs"></i>
+              <button id="download-quiz-json-btn" class="px-2 py-1 bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white border border-surface-700 rounded-lg text-[11px] font-medium cursor-pointer" title="Download JSON">
+                <i class="fa-solid fa-code text-[10px]"></i>
               </button>
 
-              <button id="retake-quiz-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer" title="Reset Quiz">
-                <i class="fa-solid fa-rotate-right text-xs"></i>
+              <button id="retake-quiz-btn" class="px-2 py-1 bg-surface-800 hover:bg-surface-700 text-slate-400 hover:text-white border border-surface-700 rounded-lg text-[11px] font-medium cursor-pointer" title="Reset Quiz">
+                <i class="fa-solid fa-rotate-right text-[10px]"></i>
               </button>
             </div>
           </div>
@@ -659,71 +660,72 @@
       <section id="page-library" class="page-view hidden space-y-5">
         
         <!-- Library Header Card -->
-        <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-4 sm:p-6 shadow-xl backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-2">
-              <i class="fa-solid fa-bookmark text-cyan-400 text-lg"></i>
-              <h2 class="text-lg sm:text-xl font-extrabold text-white">Saved Quizzes Library</h2>
-            </div>
+        <div class="bg-surface-900/90 border border-surface-700/80 rounded-3xl p-3.5 sm:p-5 shadow-xl backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-bookmark text-cyan-400 text-base sm:text-lg"></i>
+            <h2 class="text-base sm:text-lg font-extrabold text-white">Saved Quizzes Library</h2>
           </div>
 
-          <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full md:w-auto">
             <!-- 1-Click Browse All Quizzes Available in MongoDB -->
-            <button id="open-mongo-catalog-btn" class="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer" title="View all quizzes headings and codes saved in MongoDB Cloud">
-              <i class="fa-solid fa-database text-xs text-cyan-400"></i>
-              <span>MongoDB Quizzes Catalog</span>
+            <button id="open-mongo-catalog-btn" class="px-2.5 py-1.5 bg-gradient-to-r from-cyan-600/25 to-blue-600/25 hover:from-cyan-600/40 hover:to-blue-600/40 text-cyan-300 border border-cyan-500/35 rounded-xl text-[11px] font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer" title="View all quizzes headings and codes saved in MongoDB Cloud">
+              <i class="fa-solid fa-database text-[10px] text-cyan-400"></i>
+              <span>Cloud Catalog</span>
             </button>
 
             <!-- 1-Click Push ALL Quizzes to MongoDB -->
-            <button id="push-all-quizzes-mongo-btn" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to MongoDB Cloud so they can be accessed anywhere via code">
-              <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
-              <span id="push-all-quizzes-label">Push All to MongoDB</span>
+            <button id="push-all-quizzes-mongo-btn" class="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to MongoDB Cloud">
+              <i class="fa-solid fa-cloud-arrow-up text-[10px]"></i>
+              <span id="push-all-quizzes-label">Push All</span>
             </button>
 
-            <button id="import-code-modal-btn" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-surface-800 hover:from-amber-500/30 hover:to-surface-750 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm">
-              <i class="fa-solid fa-key text-amber-400"></i>
-              <span>Import Quiz Code</span>
+            <button id="import-code-modal-btn" class="px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 rounded-xl text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Import quiz using 6-digit code">
+              <i class="fa-solid fa-key text-[10px] text-amber-400"></i>
+              <span>Import Code</span>
             </button>
 
-            <button id="create-section-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5">
-              <i class="fa-solid fa-folder-plus text-amber-400"></i>
-              <span>+ New Folder</span>
+            <button id="create-section-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl text-[11px] font-semibold cursor-pointer flex items-center gap-1.5">
+              <i class="fa-solid fa-folder-plus text-[10px] text-amber-400"></i>
+              <span>+ Folder</span>
             </button>
 
-            <button id="library-sync-btn" class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Sync quizzes with MongoDB Cloud">
-              <i class="fa-solid fa-arrows-rotate text-emerald-400 text-xs"></i>
-              <span>Sync Cloud</span>
+            <button id="library-sync-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Sync with Cloud">
+              <i class="fa-solid fa-arrows-rotate text-emerald-400 text-[10px]"></i>
+              <span>Sync</span>
             </button>
 
-            <label class="px-3 py-1.5 bg-surface-800 hover:bg-surface-750 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5">
-              <i class="fa-solid fa-upload"></i>
-              <span>Import JSON</span>
+            <label class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-cyan-300 border border-cyan-500/40 rounded-xl text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1.5">
+              <i class="fa-solid fa-upload text-[10px]"></i>
+              <span>JSON</span>
               <input type="file" id="import-quiz-file" accept=".json" class="hidden">
             </label>
           </div>
         </div>
 
-        <!-- Section / Folder Filter Pills & Sort Selector Row -->
-        <div class="flex items-center justify-between gap-3 flex-wrap bg-surface-900/60 border border-surface-800/80 rounded-2xl p-2.5">
-          <div id="library-section-pills" class="flex items-center gap-2 overflow-x-auto custom-scrollbar text-xs flex-1">
+        <!-- Section / Folder Filter Pills & Compact Sort Row (Separated neatly so Sort never overlaps) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-surface-900/70 border border-surface-800 rounded-2xl p-2 sm:p-2.5">
+          <!-- Folder Filter Pills (Scrollable horizontally without wrapping over sort) -->
+          <div id="library-section-pills" class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar text-xs py-0.5 min-w-0 flex-1">
             <!-- Dynamic section pills like [All (8)] [History (3)] [Coding (5)] -->
           </div>
 
-          <!-- Sort by Heading / Title -->
-          <div class="flex items-center gap-1.5 text-xs text-slate-400 bg-surface-800/80 border border-surface-700 px-3 py-1.5 rounded-xl ml-auto">
-            <i class="fa-solid fa-arrow-down-a-z text-rose-400 text-xs"></i>
+          <!-- Compact Sort Selector -->
+          <div class="flex items-center gap-1.5 text-xs text-slate-400 bg-surface-800/90 border border-surface-700 px-2.5 py-1.5 rounded-xl shrink-0 self-end sm:self-auto">
+            <i class="fa-solid fa-arrow-down-a-z text-rose-400 text-[11px]"></i>
             <span class="font-semibold text-slate-300 text-[11px]">Sort:</span>
-            <select id="library-sort-select" class="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer">
-              <option value="title_asc" selected class="bg-surface-900 text-white">Heading / Title (A-Z)</option>
-              <option value="title_desc" class="bg-surface-900 text-white">Heading / Title (Z-A)</option>
-              <option value="newest" class="bg-surface-900 text-white">Newest First</option>
-              <option value="questions" class="bg-surface-900 text-white">Most Questions</option>
+            <select id="library-sort-select" class="bg-transparent text-white font-bold text-[11px] focus:outline-none cursor-pointer">
+              <option value="title_asc" selected class="bg-surface-900 text-white">A-Z</option>
+              <option value="title_desc" class="bg-surface-900 text-white">Z-A</option>
+              <option value="newest" class="bg-surface-900 text-white">Newest</option>
+              <option value="questions" class="bg-surface-900 text-white">Questions</option>
             </select>
           </div>
         </div>
 
-        <!-- Saved Quizzes Grid Container -->
-        <div id="library-quizzes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Saved Quizzes Grid Container (4 columns on PC screens as requested) -->
+        <div id="library-quizzes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+          <!-- Dynamic Quiz Cards -->
+        </div>
           <!-- Dynamic Quiz Cards -->
         </div>
 
@@ -1057,6 +1059,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=4.9.0"></script>
+  <script src="/static/app.js?v=6.0.0"></script>
 </body>
 </html>

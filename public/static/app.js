@@ -133,6 +133,9 @@ const librarySortSelect = document.getElementById('library-sort-select');
 // Quiz Arena View Mode DOM (1-by-1 Focus Mode vs All Questions)
 const viewModeSingleBtn = document.getElementById('view-mode-single-btn');
 const viewModeAllBtn = document.getElementById('view-mode-all-btn');
+const toggleQuizDetailsBtn = document.getElementById('toggle-quiz-details-btn');
+const quizDetailsDrawer = document.getElementById('quiz-details-drawer');
+const quizDetailsArrowIcon = document.getElementById('quiz-details-arrow-icon');
 const quizJumpNavContainer = document.getElementById('quiz-jump-nav-container');
 const quizJumpPills = document.getElementById('quiz-jump-pills');
 const quizSingleNavContainer = document.getElementById('quiz-single-nav-container');
@@ -374,25 +377,36 @@ function setupNetworkListeners() {
 
 function updateServerStatusUI(online) {
   isServerOnline = !!online;
+  const userDot = document.getElementById('user-status-dot');
+  const guestDot = document.getElementById('guest-status-dot');
+  const userBtn = document.getElementById('user-profile-btn');
+  const authBtn = document.getElementById('auth-modal-btn');
+
   if (online) {
-    if (serverStatusPing) {
-      serverStatusPing.className = 'animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75';
+    if (userDot) userDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+    if (guestDot) guestDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+    if (userBtn) {
+      userBtn.classList.remove('border-rose-500/60');
+      userBtn.classList.add('border-emerald-500/40');
+      userBtn.title = 'Server: Online (Port 8000)';
     }
-    if (serverStatusDot) {
-      serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 ring-2 ring-emerald-500/30';
-    }
-    if (serverStatusPill) {
-      serverStatusPill.title = 'Server: Online (Port 8000)';
+    if (authBtn) {
+      authBtn.classList.remove('border-rose-500/60');
+      authBtn.classList.add('border-surface-700');
+      authBtn.title = 'Server: Online (Click to Login)';
     }
   } else {
-    if (serverStatusPing) {
-      serverStatusPing.className = 'hidden';
+    if (userDot) userDot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+    if (guestDot) guestDot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+    if (userBtn) {
+      userBtn.classList.remove('border-emerald-500/40');
+      userBtn.classList.add('border-rose-500/60');
+      userBtn.title = 'Server: Offline (Click Desktop status file to start)';
     }
-    if (serverStatusDot) {
-      serverStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-rose-500/30 animate-pulse';
-    }
-    if (serverStatusPill) {
-      serverStatusPill.title = 'Server: Offline (Click Desktop status file to start)';
+    if (authBtn) {
+      authBtn.classList.remove('border-surface-700');
+      authBtn.classList.add('border-rose-500/60');
+      authBtn.title = 'Server: Offline (Click Desktop status file to start)';
     }
   }
 }
@@ -611,6 +625,18 @@ function setupEventListeners() {
   }
   if (viewModeAllBtn) {
     viewModeAllBtn.addEventListener('click', () => setQuizViewMode('all'));
+  }
+  if (toggleQuizDetailsBtn && quizDetailsDrawer) {
+    toggleQuizDetailsBtn.addEventListener('click', () => {
+      const isHidden = quizDetailsDrawer.classList.toggle('hidden');
+      if (quizDetailsArrowIcon) {
+        if (isHidden) {
+          quizDetailsArrowIcon.classList.remove('rotate-180');
+        } else {
+          quizDetailsArrowIcon.classList.add('rotate-180');
+        }
+      }
+    });
   }
   if (quizPrevQBtn) {
     quizPrevQBtn.addEventListener('click', () => {
@@ -1961,84 +1987,76 @@ function renderLibraryQuizzesGrid() {
 
   quizzes.forEach((quiz) => {
     const card = document.createElement('div');
-    card.className = 'p-5 rounded-3xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-xl flex flex-col justify-between gap-4 relative';
+    card.className = 'p-4 rounded-2xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-lg flex flex-col justify-between gap-3 relative';
 
     card.innerHTML = `
       <div>
-        <div class="flex items-center justify-between text-xs text-slate-400 mb-2.5">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2.5 py-0.5 rounded-full text-[10px]">
-              ${quiz.total_questions} Concept MCQs
-            </span>
-            ${(quiz.code || quiz.share_code) ? `
-              <span class="text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1" title="6-Digit Share PIN">
-                <i class="fa-solid fa-key text-[9px]"></i> ${quiz.code || quiz.share_code}
-              </span>
-              <span class="text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1" title="Backed up on MongoDB Cloud">
-                <i class="fa-solid fa-cloud-check text-[9px]"></i> MongoDB
-              </span>
-            ` : ''}
-          </div>
-          <span class="text-[11px] text-slate-500">${quiz.savedAt}</span>
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+          <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2.5 py-0.5 rounded-full text-[10px]">
+            ${quiz.total_questions} Concept MCQs
+          </span>
+          <span class="text-[10px] text-slate-500">${quiz.savedAt}</span>
         </div>
 
-        <div class="flex items-start justify-between gap-2">
-          <h4 class="font-bold text-white text-sm sm:text-base line-clamp-2 leading-snug flex-1" id="lib-title-${quiz.id}">
-            ${escapeHtml(quiz.title)}
-          </h4>
-        </div>
+        <h4 class="font-bold text-white text-sm line-clamp-2 leading-snug" id="lib-title-${quiz.id}">
+          ${escapeHtml(quiz.title)}
+        </h4>
 
         ${quiz.score ? `
-          <div class="mt-2.5 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-xl font-bold text-[11px]">
-            <i class="fa-solid fa-trophy text-[9px]"></i> Last Score: ${quiz.score}
+          <div class="mt-2 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-xl font-bold text-[10px]">
+            <i class="fa-solid fa-trophy text-[9px]"></i> Score: ${quiz.score}
           </div>
         ` : ''}
       </div>
 
-      <div class="flex items-center justify-between pt-3 border-t border-surface-800 gap-2">
-        <button class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
-          <i class="fa-solid fa-play text-[10px]"></i>
+      <div class="flex items-center justify-between pt-2.5 border-t border-surface-800 gap-1.5">
+        <button class="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
+          <i class="fa-solid fa-play text-[9px]"></i>
           <span>Start Practice Arena</span>
         </button>
 
         <!-- 3-Dot Kebab Menu Container -->
         <div class="relative dropdown-container">
-          <button class="w-9 h-9 rounded-xl bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700 flex items-center justify-center transition-all cursor-pointer card-menu-btn" data-id="${quiz.id}" title="Quiz Options">
-            <i class="fa-solid fa-ellipsis-vertical text-sm"></i>
+          <button class="w-8 h-8 rounded-xl bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700 flex items-center justify-center transition-all cursor-pointer card-menu-btn" data-id="${quiz.id}" title="Quiz Options">
+            <i class="fa-solid fa-ellipsis-vertical text-xs"></i>
           </button>
 
           <!-- Floating Dropdown Menu -->
-          <div id="card-menu-dropdown-${quiz.id}" class="hidden card-menu-dropdown absolute right-0 bottom-full mb-2 w-48 bg-surface-950 border border-surface-750 rounded-2xl shadow-2xl p-1.5 z-30 space-y-0.5 backdrop-blur-xl">
+          <div id="card-menu-dropdown-${quiz.id}" class="hidden card-menu-dropdown absolute right-0 bottom-full mb-2 w-52 bg-surface-950 border border-surface-750 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 backdrop-blur-xl">
             ${(quiz.code || quiz.share_code) ? `
-              <div class="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-400/90 bg-emerald-500/10 rounded-xl flex items-center gap-2 cursor-default">
-                <i class="fa-solid fa-cloud-check text-emerald-400 w-4"></i>
+              <div class="px-2.5 py-1.5 text-[11px] font-mono text-amber-300 bg-amber-500/10 rounded-xl flex items-center justify-between border border-amber-500/20">
+                <span class="text-slate-400 font-sans text-[10px]">Code:</span>
+                <span class="font-bold tracking-wider">${quiz.code || quiz.share_code}</span>
+              </div>
+              <div class="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-emerald-400/90 bg-emerald-500/10 rounded-xl flex items-center gap-2 cursor-default border border-emerald-500/20">
+                <i class="fa-solid fa-cloud-check text-emerald-400 text-xs"></i>
                 <span>Already on MongoDB</span>
               </div>
             ` : `
-              <button class="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer push-single-mongo-btn" data-id="${quiz.id}">
-                <i class="fa-solid fa-cloud-arrow-up text-emerald-400 w-4"></i>
+              <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 rounded-xl flex items-center gap-2 cursor-pointer push-single-mongo-btn" data-id="${quiz.id}">
+                <i class="fa-solid fa-cloud-arrow-up text-emerald-400 text-xs"></i>
                 <span>Push to MongoDB</span>
               </button>
             `}
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-key text-amber-400 w-4"></i>
+            <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 rounded-xl flex items-center gap-2 cursor-pointer copy-quiz-code-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-key text-amber-400 text-xs"></i>
               <span>Copy Quiz Code</span>
             </button>
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer edit-quiz-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-pen-to-square text-rose-400 w-4"></i>
+            <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2 cursor-pointer edit-quiz-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-pen-to-square text-rose-400 text-xs"></i>
               <span>Rename / Folder</span>
             </button>
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer download-worksheet-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-file-lines text-cyan-400 w-4"></i>
+            <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2 cursor-pointer download-worksheet-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-file-lines text-cyan-400 text-xs"></i>
               <span>Worksheet (Text)</span>
             </button>
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2.5 cursor-pointer download-saved-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-code text-indigo-400 w-4"></i>
+            <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-surface-850 rounded-xl flex items-center gap-2 cursor-pointer download-saved-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-code text-indigo-400 text-xs"></i>
               <span>Download JSON</span>
             </button>
-            <div class="h-px bg-surface-800 my-1"></div>
-            <button class="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/40 rounded-xl flex items-center gap-2.5 cursor-pointer delete-saved-btn" data-id="${quiz.id}">
-              <i class="fa-solid fa-trash-can text-red-400 w-4"></i>
+            <div class="h-px bg-surface-800 my-0.5"></div>
+            <button class="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-950/40 rounded-xl flex items-center gap-2 cursor-pointer delete-saved-btn" data-id="${quiz.id}">
+              <i class="fa-solid fa-trash-can text-red-400 text-xs"></i>
               <span>Delete Quiz</span>
             </button>
           </div>
@@ -2451,12 +2469,16 @@ async function handlePushActiveQuizToMongo() {
       console.warn('[LocalStorage update warning]:', storageErr);
     }
 
-    renderLibrarySections();
-    renderLibraryQuizzesGrid();
-    updateSavedQuizBadge();
-    updateCloudCount();
-    updateAutoSaveUI('saved_cloud', code);
-    updatePushActiveQuizButtonState();
+    try {
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+      updateSavedQuizBadge();
+      updateCloudCount();
+      updateAutoSaveUI('saved_cloud', code);
+      updatePushActiveQuizButtonState();
+    } catch (uiErr) {
+      console.warn('[UI update warning]:', uiErr);
+    }
 
     // Auto-copy short code
     try {
@@ -2600,12 +2622,11 @@ function saveSavedQuizzesLocally(quizzesList) {
     localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzesList));
     return true;
   } catch (err) {
-    console.warn('[LocalStorage Quota] Could not save full list, attempting safe pruning:', err);
+    console.warn('[LocalStorage Quota] Pruning questions from older quizzes to fit within browser storage...', err);
     try {
-      // Safe Pruning: Strip heavy question arrays from older quizzes beyond the 8 most recent ones.
-      // Keeps id, title, section, score, savedAt, total_questions, and 6-digit code intact.
+      // Safe Pruning Level 1: Keep full questions for top 3 recent quizzes; stub the rest
       const pruned = quizzesList.map((q, idx) => {
-        if (idx >= 8 && q.questions && q.questions.length > 5 && (q.code || q.share_code)) {
+        if (idx >= 3 && q.questions && q.questions.length > 0) {
           const stub = { ...q };
           delete stub.questions;
           stub.is_cloud_stub = true;
@@ -2616,12 +2637,34 @@ function saveSavedQuizzesLocally(quizzesList) {
       localStorage.setItem('yt_saved_quizzes', JSON.stringify(pruned));
       return true;
     } catch (err2) {
+      // Safe Pruning Level 2: Keep full questions ONLY for top 1 active quiz
       try {
-        localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzesList.slice(0, 5)));
+        const prunedUltra = quizzesList.map((q, idx) => {
+          if (idx >= 1 && q.questions && q.questions.length > 0) {
+            const stub = { ...q };
+            delete stub.questions;
+            stub.is_cloud_stub = true;
+            return stub;
+          }
+          return q;
+        });
+        localStorage.setItem('yt_saved_quizzes', JSON.stringify(prunedUltra));
         return true;
       } catch (err3) {
-        console.error('[LocalStorage Quota Critical] Storage full:', err3);
-        return false;
+        // Safe Pruning Level 3: Metadata only
+        try {
+          const metaOnly = quizzesList.map(q => {
+            const stub = { ...q };
+            delete stub.questions;
+            stub.is_cloud_stub = true;
+            return stub;
+          });
+          localStorage.setItem('yt_saved_quizzes', JSON.stringify(metaOnly));
+          return true;
+        } catch (err4) {
+          console.error('[LocalStorage Critical] Storage full even for metadata:', err4);
+          return false;
+        }
       }
     }
   }
