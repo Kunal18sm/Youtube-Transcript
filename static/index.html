@@ -53,7 +53,19 @@
   </script>
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/static/styles.css?v=4.0.0">
+  <link rel="stylesheet" href="/static/styles.css?v=6.1.0">
+  <style>
+    /* Completely hide scrollbars while preserving touch & swipe scrollability */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none !important;
+      scrollbar-width: none !important;
+    }
+  </style>
 </head>
 <body class="bg-surface-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white relative overflow-x-hidden pb-16 sm:pb-0">
 
@@ -594,16 +606,13 @@
             </div>
           </div>
 
-          <!-- Question Jump Pills Navigation (1-by-1 Focus Mode) -->
-          <div id="quiz-jump-nav-container" class="hidden bg-surface-900 border border-surface-800 rounded-2xl p-3 shadow-lg">
-            <div class="flex items-center justify-between text-xs text-slate-400 mb-2 px-1">
-              <span class="font-bold text-slate-300 flex items-center gap-1.5">
-                <i class="fa-solid fa-compass text-rose-500"></i>
-                <span>Question Navigator</span>
-              </span>
-              <span id="quiz-jump-mode-hint" class="text-[11px] text-slate-500">Click any number to jump directly</span>
-            </div>
-            <div id="quiz-jump-pills" class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+          <!-- Compact Question Jump Pills Navigation (1-by-1 Focus Mode) -->
+          <div id="quiz-jump-nav-container" class="hidden bg-surface-900/90 border border-surface-800 rounded-xl px-2.5 py-1.5 shadow-md flex items-center gap-2">
+            <span class="font-bold text-slate-400 flex items-center gap-1 text-[11px] shrink-0">
+              <i class="fa-solid fa-compass text-rose-500 text-[10px]"></i>
+              <span class="hidden sm:inline">Jump:</span>
+            </span>
+            <div id="quiz-jump-pills" class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
               <!-- Dynamically populated question numbers: [1] [2] ... [N] -->
             </div>
           </div>
@@ -702,15 +711,15 @@
           </div>
         </div>
 
-        <!-- Section / Folder Filter Pills & Compact Sort Row (Separated neatly so Sort never overlaps) -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-surface-900/70 border border-surface-800 rounded-2xl p-2 sm:p-2.5">
-          <!-- Folder Filter Pills (Scrollable horizontally without wrapping over sort) -->
-          <div id="library-section-pills" class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar text-xs py-0.5 min-w-0 flex-1">
+        <!-- Row: Folder Filter Pills (Left) and Sort Selector (Right, completely outside of folders div) -->
+        <div class="flex items-center justify-between gap-2.5">
+          <!-- Folder Filter Pills: Pure swipe/drag/touch scrollable with NO scrollbar -->
+          <div id="library-section-pills" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-1 min-w-0 flex-1 select-none">
             <!-- Dynamic section pills like [All (8)] [History (3)] [Coding (5)] -->
           </div>
 
-          <!-- Compact Sort Selector -->
-          <div class="flex items-center gap-1.5 text-xs text-slate-400 bg-surface-800/90 border border-surface-700 px-2.5 py-1.5 rounded-xl shrink-0 self-end sm:self-auto">
+          <!-- Compact Sort Selector: Outside the folder pills div -->
+          <div class="flex items-center gap-1 text-xs text-slate-400 bg-surface-900 border border-surface-800 hover:border-surface-700 px-2.5 py-1.5 rounded-xl shrink-0 shadow-sm transition-colors">
             <i class="fa-solid fa-arrow-down-a-z text-rose-400 text-[11px]"></i>
             <span class="font-semibold text-slate-300 text-[11px]">Sort:</span>
             <select id="library-sort-select" class="bg-transparent text-white font-bold text-[11px] focus:outline-none cursor-pointer">
@@ -1059,6 +1068,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=6.0.0"></script>
+  <script src="/static/app.js?v=6.2.0"></script>
 </body>
 </html>

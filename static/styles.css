@@ -77,3 +77,15 @@ mark.search-highlight {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
+
+/* Completely hide scrollbars while preserving touch/mouse scrollability */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}

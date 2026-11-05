@@ -1328,10 +1328,16 @@ function renderQuizPlayer() {
             <span class="translate-q-label">${isHindi ? 'English' : 'हिंदी'}</span>
           </button>
 
-          <!-- Timestamp Seek Button -->
-          <button class="flex items-center gap-1 font-mono text-[11px] text-rose-400 bg-surface-900 hover:bg-rose-600 hover:text-white px-2 py-0.5 rounded-lg border border-surface-800 cursor-pointer transition-colors" onclick="seekToTime(${timestampSec})" title="Jump video to ${q.timestamp}">
-            <i class="fa-solid fa-play text-[8px]"></i>
+          <!-- Timestamp Open on YouTube Button -->
+          <button 
+            type="button"
+            class="flex items-center gap-1.5 font-mono text-[11px] text-rose-400 bg-surface-900 hover:bg-rose-600 hover:text-white px-2 py-0.5 rounded-lg border border-surface-800 cursor-pointer transition-colors group" 
+            onclick="openYouTubeAtTimestamp(${timestampSec}, '${escapeHtml(currentQuizData.video_id || currentVideoId || '')}')" 
+            title="Open YouTube video at ${q.timestamp}"
+          >
+            <i class="fa-brands fa-youtube text-[11px] text-rose-500 group-hover:text-white"></i>
             <span>${q.timestamp || '00:00'}</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-70 group-hover:opacity-100"></i>
           </button>
 
           <!-- NEW: Delete Individual Question Button -->
@@ -1477,7 +1483,7 @@ function updateQuizViewDisplay() {
         const answeredLetter = quizUserAnswers[qid];
         const correctLetter = (q.correct_answer || '').trim().charAt(0).toUpperCase();
 
-        let baseClasses = 'shrink-0 min-w-8 h-8 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ';
+        let baseClasses = 'shrink-0 min-w-7 h-7 px-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center ';
         if (isCurrent) {
           baseClasses += 'ring-2 ring-rose-500 bg-rose-600 text-white shadow-md shadow-rose-600/30 ';
         } else if (answeredLetter) {
@@ -3344,6 +3350,17 @@ function togglePlayer() {
     }
   }
 }
+
+window.openYouTubeAtTimestamp = function(seconds, videoId) {
+  const vid = videoId || currentQuizData?.video_id || currentVideoId || '';
+  const sec = Math.max(0, Math.floor(seconds || 0));
+  if (vid) {
+    const url = `https://www.youtube.com/watch?v=${encodeURIComponent(vid)}&t=${sec}s`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else {
+    seekToTime(seconds);
+  }
+};
 
 window.seekToTime = function(seconds) {
   if (playerContainer.classList.contains('hidden')) togglePlayer();
