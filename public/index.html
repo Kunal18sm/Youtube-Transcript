@@ -1069,12 +1069,18 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="border-t border-surface-800 pt-3 flex items-center justify-between text-xs text-slate-400">
+      <div class="border-t border-surface-800 pt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
         <span id="mongo-catalog-count" class="font-semibold text-slate-300">0 quizzes found</span>
-        <button id="refresh-mongo-catalog-btn" class="px-3.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer">
-          <i class="fa-solid fa-arrows-rotate text-[11px] text-cyan-400"></i>
-          <span>Refresh</span>
-        </button>
+        <div class="flex items-center gap-2">
+          <button id="sync-all-catalog-to-library-btn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer" title="Import / Sync all MongoDB quizzes into your Library">
+            <i class="fa-solid fa-cloud-arrow-down text-[11px]"></i>
+            <span>Import All to Library</span>
+          </button>
+          <button id="refresh-mongo-catalog-btn" class="px-3.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-200 border border-surface-700 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer">
+            <i class="fa-solid fa-arrows-rotate text-[11px] text-cyan-400"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
     </div>
@@ -1223,6 +1229,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=6.3.0"></script>
+  <script src="/static/app.js?v=6.4.0"></script>
 </body>
 </html>

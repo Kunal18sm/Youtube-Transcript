@@ -1466,7 +1466,7 @@ def save_all_quizzes_to_cloud(payload: QuizBulkSavePayload):
     }
 
 @app.get("/api/user/quizzes")
-def get_user_quizzes(username: str = Query(...)):
+def get_user_quizzes(username: str = Query(...), include_questions: bool = Query(False)):
     global _mongo_client
     get_mongo()
     uname = sanitize_username(username)
@@ -1475,9 +1475,13 @@ def get_user_quizzes(username: str = Query(...)):
 
     try:
         col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
+        projection = {"_id": 0}
+        if not include_questions:
+            projection["questions"] = 0
+
         cursor = col.find(
             {"$or": [{"linked_users": uname}, {"username": uname}]},
-            {"_id": 0}
+            projection
         ).sort("updated_at", -1)
         quizzes_list = list(cursor)
         return {
@@ -1488,6 +1492,7 @@ def get_user_quizzes(username: str = Query(...)):
         }
     except Exception as e:
         print(f"[User Quizzes Fetch Error] {e}")
+        return {"quizzes": [], "error": str(e)}
         return {"quizzes": [], "error": str(e)}
 
 @app.post("/api/quiz/share")
@@ -1551,9 +1556,15 @@ def get_cloud_catalog():
         col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
         cursor = col.find(
             {},
-            {"code": 1, "title": 1, "section": 1, "total_questions": 1, "updated_at": 1, "savedAt": 1, "score": 1, "username": 1, "_id": 0}
-        ).sort("updated_at", -1)
+            {"id": 1, "code": 1, "title": 1, "section": 1, "total_questions": 1, "updated_at": 1, "savedAt": 1, "score": 1, "username": 1, "video_id": 1, "_id": 0}
+        )
         quizzes = list(cursor)
+        for q in quizzes:
+            if not q.get("total_questions"):
+                q["total_questions"] = 0
+            if not q.get("id"):
+                q["id"] = "quiz_" + str(q.get("code", ""))
+        quizzes.sort(key=lambda q: (q.get("title") or "").strip().lower())
         return {
             "success": True,
             "total": len(quizzes),

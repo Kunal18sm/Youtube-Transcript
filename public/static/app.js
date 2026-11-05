@@ -12,7 +12,7 @@ let isGlobalHindi = false;
 
 // Library & Folder State
 let activeSectionFilter = 'All';
-const DEFAULT_SECTIONS = ['All', 'General', 'History', 'Coding & Tech', 'Science', 'UPSC & Exams'];
+const DEFAULT_SECTIONS = ['All', 'General', 'History', 'History 2', 'History 3', 'English Vocab'];
 
 // PWA Install Prompt Deferred Event
 let deferredPrompt = null;
@@ -835,6 +835,62 @@ function setupEventListeners() {
   }
   if (refreshMongoCatalogBtn) {
     refreshMongoCatalogBtn.addEventListener('click', () => fetchAndRenderMongoCatalog(mongoCatalogSearch ? mongoCatalogSearch.value : ''));
+  }
+  const syncAllCatalogToLibraryBtn = document.getElementById('sync-all-catalog-to-library-btn');
+  if (syncAllCatalogToLibraryBtn) {
+    syncAllCatalogToLibraryBtn.addEventListener('click', async () => {
+      if (!mongoCatalogQuizzes || mongoCatalogQuizzes.length === 0) return;
+      syncAllCatalogToLibraryBtn.disabled = true;
+      syncAllCatalogToLibraryBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs"></i> <span>Importing...</span>';
+
+      const localQuizzes = getSavedQuizzes();
+      let merged = [...localQuizzes];
+      let addedCount = 0;
+
+      mongoCatalogQuizzes.forEach(item => {
+        const exists = merged.findIndex(l => (item.code && l.code === item.code) || (item.id && l.id === item.id));
+        if (exists === -1) {
+          merged.push({
+            id: item.id || ('quiz_' + item.code),
+            title: item.title || 'Video Quiz',
+            section: item.section || 'General',
+            total_questions: item.total_questions || 0,
+            savedAt: item.savedAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            score: item.score || null,
+            code: item.code,
+            share_code: item.code,
+            video_id: item.video_id || ''
+          });
+          addedCount++;
+        }
+      });
+
+      const currentSections = getStoredSections();
+      const dynamicSections = new Set(currentSections);
+      merged.forEach(q => {
+        if (q && q.section && typeof q.section === 'string' && q.section.trim()) {
+          dynamicSections.add(q.section.trim());
+        }
+      });
+      saveStoredSections(Array.from(dynamicSections));
+
+      saveSavedQuizzesLocally(merged);
+      updateSavedQuizBadge();
+      populateSectionDropdown();
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+      renderMongoCatalogItems(mongoCatalogSearch ? mongoCatalogSearch.value : '');
+
+      syncAllCatalogToLibraryBtn.disabled = false;
+      syncAllCatalogToLibraryBtn.innerHTML = '<i class="fa-solid fa-check text-xs text-emerald-400"></i> <span>All Imported!</span>';
+      showToast(`🎉 Imported all ${mongoCatalogQuizzes.length} MongoDB quizzes into your Library!`, 'success');
+
+      setTimeout(() => {
+        if (syncAllCatalogToLibraryBtn) {
+          syncAllCatalogToLibraryBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Import All to Library</span>';
+        }
+      }, 3000);
+    });
   }
   if (mongoCatalogSearch) {
     let searchDebounceTimer = null;
@@ -2012,12 +2068,25 @@ async function toggleAllQuestionsLanguage() {
 // ----------------------------------------------------
 
 function getStoredSections() {
+  let sections = DEFAULT_SECTIONS;
   try {
     const raw = localStorage.getItem('yt_quiz_sections');
-    return raw ? JSON.parse(raw) : DEFAULT_SECTIONS;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) sections = parsed;
+    }
   } catch (e) {
-    return DEFAULT_SECTIONS;
+    sections = DEFAULT_SECTIONS;
   }
+
+  // Dynamically include any section present in saved quizzes
+  const dynamicSet = new Set(sections);
+  getSavedQuizzes().forEach(q => {
+    if (q && q.section && typeof q.section === 'string' && q.section.trim()) {
+      dynamicSet.add(q.section.trim());
+    }
+  });
+  return Array.from(dynamicSet);
 }
 
 function saveStoredSections(sections) {
@@ -3409,7 +3478,7 @@ async function fetchAndRenderMongoCatalog(searchFilter = '') {
   `;
 
   try {
-    const res = await fetch('/api/quiz/cloud_catalog');
+    const res = await fetch(`/api/quiz/cloud_catalog?_t=${Date.now()}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || 'Failed to load MongoDB directory');
@@ -3455,7 +3524,7 @@ function renderMongoCatalogItems(searchFilter = '') {
   filtered.sort((a, b) => (a.title || '').trim().localeCompare((b.title || '').trim(), undefined, { numeric: true, sensitivity: 'base' }));
 
   if (mongoCatalogCount) {
-    mongoCatalogCount.textContent = `Showing ${filtered.length} of ${mongoCatalogQuizzes.length} MongoDB quizzes`;
+    mongoCatalogCount.textContent = `Showing ${filtered.length} of ${mongoCatalogQuizzes.length} MongoDB quizzes (yt_transcript)`;
   }
 
   if (filtered.length === 0) {
@@ -3469,8 +3538,10 @@ function renderMongoCatalogItems(searchFilter = '') {
     return;
   }
 
+  const savedQuizzes = getSavedQuizzes();
   mongoCatalogList.innerHTML = '';
   filtered.forEach(item => {
+    const isAlreadySaved = savedQuizzes.some(sq => (item.code && sq.code === item.code) || (item.id && sq.id === item.id));
     const card = document.createElement('div');
     card.className = 'p-3.5 rounded-2xl bg-surface-950/80 border border-surface-800 hover:border-surface-700 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
     
@@ -3502,6 +3573,19 @@ function renderMongoCatalogItems(searchFilter = '') {
           <i class="fa-regular fa-copy text-[10px] text-amber-400/70 ml-0.5"></i>
         </button>
 
+        <!-- Add to Library / In Library Status -->
+        ${isAlreadySaved ? `
+          <span class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1" title="Already added to your Library">
+            <i class="fa-solid fa-circle-check text-[10px]"></i>
+            <span>In Library</span>
+          </span>
+        ` : `
+          <button class="px-2.5 py-1.5 rounded-xl bg-surface-800 hover:bg-surface-750 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer add-single-catalog-btn" data-code="${item.code}" title="Add this quiz to your Library">
+            <i class="fa-solid fa-cloud-arrow-down text-[10px]"></i>
+            <span>Add</span>
+          </button>
+        `}
+
         <!-- 1-Click Launch in Arena -->
         <button class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer open-catalog-quiz-btn" data-code="${item.code}" title="Open this quiz directly in Quiz Arena">
           <i class="fa-solid fa-play text-[10px]"></i>
@@ -3524,6 +3608,39 @@ function renderMongoCatalogItems(searchFilter = '') {
       } catch (_) {
         showToast(`Code: ${code}`, 'info');
       }
+    });
+  });
+
+  mongoCatalogList.querySelectorAll('.add-single-catalog-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const code = btn.dataset.code;
+      const targetItem = mongoCatalogQuizzes.find(m => m.code === code);
+      if (!targetItem) return;
+
+      const list = getSavedQuizzes();
+      const existing = list.findIndex(l => l.code === code);
+      if (existing === -1) {
+        list.unshift({
+          id: targetItem.id || ('quiz_' + code),
+          title: targetItem.title || 'Video Quiz',
+          section: targetItem.section || 'General',
+          total_questions: targetItem.total_questions || 0,
+          savedAt: targetItem.savedAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          score: targetItem.score || null,
+          code: code,
+          share_code: code,
+          video_id: targetItem.video_id || ''
+        });
+      }
+
+      saveSavedQuizzesLocally(list);
+      updateSavedQuizBadge();
+      populateSectionDropdown();
+      renderLibrarySections();
+      renderLibraryQuizzesGrid();
+      renderMongoCatalogItems(mongoCatalogSearch ? mongoCatalogSearch.value : '');
+      showToast(`🎉 "${targetItem.title}" added to your Library!`, 'success');
     });
   });
 
@@ -3901,61 +4018,49 @@ async function syncQuizzesWithCloud(silent = false) {
   if (!currentUser || !currentUser.username) return;
 
   try {
-    const res = await fetch(`/api/user/quizzes?username=${encodeURIComponent(currentUser.username)}`);
+    const res = await fetch(`/api/user/quizzes?username=${encodeURIComponent(currentUser.username)}&_t=${Date.now()}`);
     if (!res.ok) return;
     const data = await res.json();
     const cloudQuizzes = data.quizzes || [];
 
-    const deletedIds = JSON.parse(localStorage.getItem('yt_deleted_quizzes') || '[]');
     const localQuizzes = getSavedQuizzes();
     let merged = [...localQuizzes];
     let newImported = 0;
 
-    // 1. Merge cloud quizzes into local library (caches in localStorage for 100% offline access!)
+    // 1. Merge cloud quizzes into local library
     cloudQuizzes.forEach(cq => {
-      // Don't import if user deleted it locally
-      if (deletedIds.includes(cq.id) || (cq.code && deletedIds.includes(cq.code))) {
-        return;
-      }
-      const idx = merged.findIndex(lq => lq.id === cq.id || (cq.code && lq.code === cq.code));
+      const idx = merged.findIndex(lq => (cq.code && lq.code === cq.code) || (cq.id && lq.id === cq.id));
       if (idx !== -1) {
-        merged[idx] = { ...merged[idx], ...cq };
+        merged[idx] = { ...cq, ...merged[idx] };
       } else {
-        merged.unshift(cq);
+        merged.push(cq);
         newImported++;
       }
     });
 
+    // 2. Dynamically extract and register all folders/sections present across all quizzes
+    const currentSections = getStoredSections();
+    const dynamicSections = new Set(currentSections);
+    merged.forEach(q => {
+      if (q && q.section && typeof q.section === 'string' && q.section.trim()) {
+        dynamicSections.add(q.section.trim());
+      }
+    });
+    saveStoredSections(Array.from(dynamicSections));
+
+    // 3. Persist and render
     saveSavedQuizzesLocally(merged);
     updateSavedQuizBadge();
+    populateSectionDropdown();
     renderLibrarySections();
     renderLibraryQuizzesGrid();
     updateCloudCount();
 
-    // 2. Also auto-upload any local quizzes that aren't yet in MongoDB
-    for (const lq of localQuizzes) {
-      if (deletedIds.includes(lq.id) || (lq.code && deletedIds.includes(lq.code))) continue;
-      const inCloud = cloudQuizzes.some(cq => cq.id === lq.id || (lq.code && cq.code === lq.code));
-      if (!inCloud && lq.questions && lq.questions.length > 0) {
-        fetch('/api/quiz/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: currentUser.username, quiz: lq })
-        }).then(r => r.json()).then(savedRes => {
-          if (savedRes && savedRes.code) {
-            lq.code = savedRes.code;
-            lq.share_code = savedRes.code;
-            saveSavedQuizzesLocally(merged);
-            renderLibraryQuizzesGrid();
-          }
-        }).catch(() => {});
-      }
-    }
-
     if (!silent) {
-      showToast(`☁️ Cloud Sync: ${cloudQuizzes.length} quizzes loaded for "${currentUser.username}"!`, 'success');
+      showToast(`☁️ Cloud Sync: ${merged.length} quizzes loaded for "${currentUser.username}"!`, 'success');
     }
   } catch (err) {
+    console.error('[Cloud Sync Error]:', err);
     if (!silent) showToast('Could not sync with MongoDB Cloud. Offline quizzes available.', 'error');
   }
 }
