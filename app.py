@@ -686,7 +686,7 @@ def translate_str(text: str, target: str = "hi", source: str = "en") -> str:
         api_key = get_gemini_api_key()
         if api_key:
             prompt = f"Translate the following text accurately into Hindi (Devanagari script). Return ONLY the translated Hindi text without quotes or preamble:\n\n{clean_text}"
-            for model in ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]:
+            for model in ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]:
                 u = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
                 p = {"contents": [{"parts": [{"text": prompt}]}]}
                 res = requests.post(u, json=p, timeout=7)
@@ -829,9 +829,10 @@ _mongo_client = None
 _mongo_db = None
 _quiz_users_col = None
 _quiz_quizzes_col = None
+_indexes_created = False
 
 def get_mongo():
-    global _mongo_client, _mongo_db, _quiz_users_col, _quiz_quizzes_col
+    global _mongo_client, _mongo_db, _quiz_users_col, _quiz_quizzes_col, _indexes_created
     if _quiz_users_col is not None and _quiz_quizzes_col is not None:
         return _quiz_users_col, _quiz_quizzes_col
 
@@ -857,18 +858,21 @@ def get_mongo():
         _quiz_users_col = _mongo_db["quiz_users"]
         _quiz_quizzes_col = _mongo_db["quiz_quizzes"]
 
-        # Ensure performance indexes gracefully
-        for col, idx, kwargs in [
-            (_quiz_users_col, [("username", ASCENDING)], {"unique": True}),
-            (_quiz_quizzes_col, [("code", ASCENDING)], {}),
-            (_quiz_quizzes_col, [("username", ASCENDING)], {}),
-            (_quiz_quizzes_col, [("linked_users", ASCENDING)], {}),
-            (_quiz_quizzes_col, [("id", ASCENDING)], {})
-        ]:
-            try:
-                col.create_index(idx, **kwargs)
-            except Exception:
-                pass
+        # Ensure performance indexes once per connection
+        if not _indexes_created:
+            for col, idx, kwargs in [
+                (_quiz_users_col, [("username", ASCENDING)], {"unique": True}),
+                (_quiz_quizzes_col, [("code", ASCENDING)], {}),
+                (_quiz_quizzes_col, [("username", ASCENDING)], {}),
+                (_quiz_quizzes_col, [("linked_users", ASCENDING)], {}),
+                (_quiz_quizzes_col, [("id", ASCENDING)], {}),
+                (_quiz_quizzes_col, [("updated_at", -1)], {})
+            ]:
+                try:
+                    col.create_index(idx, **kwargs)
+                except Exception:
+                    pass
+            _indexes_created = True
 
         return _quiz_users_col, _quiz_quizzes_col
     except Exception as e:
@@ -876,6 +880,7 @@ def get_mongo():
         _mongo_client = None
         _quiz_users_col = None
         _quiz_quizzes_col = None
+        _indexes_created = False
         return None, None
 
 # Try initializing on startup

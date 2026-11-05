@@ -23,26 +23,39 @@ def load_env_file():
 
 load_env_file()
 
-def get_gemini_api_key() -> Optional[str]:
+def get_gemini_api_keys() -> List[str]:
     load_env_file()
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
+    keys = []
+    for var in ["GEMINI_API_KEYS", "GEMINI_API_KEY"]:
+        val = os.environ.get(var, "")
+        if val:
+            for k in val.split(","):
+                k_clean = k.strip()
+                if k_clean and k_clean not in keys:
+                    keys.append(k_clean)
+    if not keys:
         try:
             import base64
-            key = base64.b64decode("QVEuQWI4Uk42S3pqcWszXzJ4MGFSMkR1anhVUW1yZXhhTVZsOGxqT2JORVcxMmtWLVNhd0E=").decode("utf-8")
+            default_k = base64.b64decode("QVEuQWI4Uk42S3pqcWszXzJ4MGFSMkR1anhVUW1yZXhhTVZsOGxqT2JORVcxMmtWLVNhd0E=").decode("utf-8")
+            keys.append(default_k)
         except Exception:
             pass
-    return key
+    return keys
 
-# Prioritize fast, high-rate-limit models
+def get_gemini_api_key() -> Optional[str]:
+    keys = get_gemini_api_keys()
+    return keys[0] if keys else None
+
+# Prioritize active, high-rate-limit models confirmed supported by Google Gemini API
 MODELS_TO_TRY = [
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
     "gemini-3-flash-preview"
 ]
+
+last_quota_error = None
 
 CHATTER_PATTERNS = [
     # Hindi / Hinglish greetings & chatter
@@ -87,80 +100,100 @@ def clean_transcript_lines(lines: List[str]) -> List[str]:
     return lines
 
 def extract_json_from_text(text: str) -> Any:
-    """Robust JSON extraction that handles markdown code blocks or embedded arrays."""
+    """Robust JSON extraction that handles markdown code blocks, trailing commas, or embedded arrays."""
     text = text.strip()
     try:
         return json.loads(text)
     except Exception:
         pass
 
+    # Clean potential trailing commas helper
+    def parse_with_clean(s: str):
+        try:
+            return json.loads(s)
+        except Exception:
+            return json.loads(re.sub(r',\s*([\}\]])', r'\1', s))
+
     m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
     if m:
         try:
-            return json.loads(m.group(1).strip())
+            return parse_with_clean(m.group(1).strip())
         except Exception:
             pass
 
     m_arr = re.search(r'\[\s*\{[\s\S]*\}\s*\]', text)
     if m_arr:
         try:
-            return json.loads(m_arr.group(0))
+            return parse_with_clean(m_arr.group(0))
         except Exception:
             pass
 
     m_obj = re.search(r'\{[\s\S]*\}', text)
     if m_obj:
         try:
-            return json.loads(m_obj.group(0))
+            return parse_with_clean(m_obj.group(0))
         except Exception:
             pass
 
     return None
 
-def call_gemini(prompt: str, api_key: str, temperature: float = 0.2) -> List[Dict[str, Any]]:
+def call_gemini(prompt: str, api_key: str = None, temperature: float = 0.2) -> List[Dict[str, Any]]:
     """
-    Call Gemini API with resilient multi-model failover and auto-retry.
+    Call Gemini API with resilient multi-key and multi-model failover, auto-retry, and exponential backoff.
     Timeout is set to 45s to avoid cutting off large JSON MCQ responses.
     """
-    last_error = None
-    for model in MODELS_TO_TRY:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "temperature": temperature,
-            }
-        }
+    global last_quota_error
+    api_keys = get_gemini_api_keys()
+    if api_key and api_key not in api_keys:
+        api_keys.insert(0, api_key)
 
-        for attempt in range(2):
-            try:
-                res = requests.post(url, json=payload, timeout=45)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if not candidates:
-                        continue
-                    raw_text = candidates[0]["content"]["parts"][0]["text"].strip()
-                    parsed = extract_json_from_text(raw_text)
-                    if isinstance(parsed, dict) and "questions" in parsed:
-                        return parsed["questions"]
-                    elif isinstance(parsed, list):
-                        return parsed
-                    elif isinstance(parsed, dict) and "audited_questions" in parsed:
-                        return parsed["audited_questions"]
-                    elif isinstance(parsed, dict) and "mcqs" in parsed:
-                        return parsed["mcqs"]
-                    return []
-                elif res.status_code in (503, 429):
-                    last_error = f"Model {model} returned {res.status_code}"
-                    time.sleep(1.0)
-                else:
-                    last_error = f"Model {model} status {res.status_code}: {res.text[:100]}"
-                    break
-            except Exception as e:
-                last_error = f"Model {model} exception: {str(e)}"
-                time.sleep(0.5)
+    last_error = None
+    for cur_key in api_keys:
+        for model in MODELS_TO_TRY:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={cur_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "temperature": temperature,
+                }
+            }
+
+            for attempt in range(2):
+                try:
+                    res = requests.post(url, json=payload, timeout=45)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidates = data.get("candidates", [])
+                        if not candidates:
+                            continue
+                        raw_text = candidates[0]["content"]["parts"][0]["text"].strip()
+                        parsed = extract_json_from_text(raw_text)
+                        if isinstance(parsed, dict) and "questions" in parsed:
+                            return parsed["questions"]
+                        elif isinstance(parsed, list):
+                            return parsed
+                        elif isinstance(parsed, dict) and "audited_questions" in parsed:
+                            return parsed["audited_questions"]
+                        elif isinstance(parsed, dict) and "mcqs" in parsed:
+                            return parsed["mcqs"]
+                        elif isinstance(parsed, dict) and ("question" in parsed or "q" in parsed):
+                            return [parsed]
+                        return []
+                    elif res.status_code == 429:
+                        last_error = f"Model {model} returned 429"
+                        if "RESOURCE_EXHAUSTED" in res.text or "quota" in res.text.lower():
+                            last_quota_error = "Gemini Free Tier daily quota limit exceeded. Please wait a short while or add another key in .env file."
+                        time.sleep(1.5 * (attempt + 1))
+                    elif res.status_code == 503:
+                        last_error = f"Model {model} returned 503"
+                        time.sleep(1.0)
+                    else:
+                        last_error = f"Model {model} status {res.status_code}: {res.text[:100]}"
+                        break
+                except Exception as e:
+                    last_error = f"Model {model} exception: {str(e)}"
+                    time.sleep(0.5)
 
     print(f"[Warning] Gemini API call warning across models: {last_error}")
     return []
@@ -395,8 +428,8 @@ def generate_mcq_quiz(
 
     all_raw_questions = []
 
-    # Parallel execution with ThreadPoolExecutor (up to 8 concurrent workers)
-    workers = min(8, len(chunks))
+    # Parallel execution with ThreadPoolExecutor (max 4 concurrent workers to strictly avoid 429 burst rate limits)
+    workers = min(4, len(chunks))
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_chunk = {
             executor.submit(
@@ -445,6 +478,8 @@ def generate_mcq_quiz(
             break
 
     if not final_questions:
+        if last_quota_error:
+            raise RuntimeError(f"⚠️ {last_quota_error}")
         raise RuntimeError("No valid questions could be extracted from this transcript. Please check the video transcript.")
 
     return {

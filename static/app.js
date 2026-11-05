@@ -146,9 +146,22 @@ const quizSingleIndicator = document.getElementById('quiz-single-indicator');
 let currentQuizViewMode = localStorage.getItem('quiz_view_mode') || 'single';
 let currentQuestionIndex = 0;
 
-// Auth & Cloud User State (MongoDB)
-let currentUser = JSON.parse(localStorage.getItem('yt_current_user') || 'null');
+// Auth & Cloud User State (MongoDB) - Safely parsed with zero crash on corrupted data
+let currentUser = null;
+try {
+  currentUser = JSON.parse(localStorage.getItem('yt_current_user') || 'null');
+} catch (_) {
+  currentUser = null;
+}
 let authMode = 'login'; // 'login' or 'register'
+
+// One-time cleanup for obsolete bloated localStorage keys from older versions
+try {
+  const legacyHist = localStorage.getItem('yt_transcript_history');
+  if (legacyHist && (legacyHist.length > 200000 || legacyHist.includes('"full_data"'))) {
+    localStorage.removeItem('yt_transcript_history');
+  }
+} catch (_) {}
 
 const authModalBtn = document.getElementById('auth-modal-btn');
 const userProfilePill = document.getElementById('user-profile-pill');
@@ -294,7 +307,11 @@ function setupPWA() {
 function saveTranscriptToCache(data) {
   try {
     if (!data) return;
-    localStorage.setItem('yt_last_transcript', JSON.stringify(data));
+    try {
+      localStorage.setItem('yt_last_transcript', JSON.stringify(data));
+    } catch (quotaErr) {
+      console.warn('[Storage Quota Warning] Could not cache entire transcript payload:', quotaErr);
+    }
 
     let history = [];
     try {
@@ -304,6 +321,7 @@ function saveTranscriptToCache(data) {
 
     const key = data.video_id || data.title;
     history = history.filter(item => (item.video_id || item.title) !== key);
+    // Store only lightweight metadata, NEVER heavy full transcripts, to save 90% quota
     history.unshift({
       video_id: data.video_id,
       title: data.title,
@@ -312,11 +330,12 @@ function saveTranscriptToCache(data) {
       formatted_duration: data.formatted_duration,
       total_words: data.total_words,
       snippets_count: (data.snippets && data.snippets.length) || (data.transcript && data.transcript.length) || 0,
-      saved_at: new Date().toISOString(),
-      full_data: data
+      saved_at: new Date().toISOString()
     });
-    if (history.length > 20) history = history.slice(0, 20);
-    localStorage.setItem('yt_transcript_history', JSON.stringify(history));
+    if (history.length > 10) history = history.slice(0, 10);
+    try {
+      localStorage.setItem('yt_transcript_history', JSON.stringify(history));
+    } catch (_) {}
   } catch (e) {
     console.warn('Could not cache transcript:', e);
   }
@@ -708,7 +727,13 @@ function setupEventListeners() {
     refreshMongoCatalogBtn.addEventListener('click', () => fetchAndRenderMongoCatalog(mongoCatalogSearch ? mongoCatalogSearch.value : ''));
   }
   if (mongoCatalogSearch) {
-    mongoCatalogSearch.addEventListener('input', (e) => renderMongoCatalogItems(e.target.value));
+    let searchDebounceTimer = null;
+    mongoCatalogSearch.addEventListener('input', (e) => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        renderMongoCatalogItems(e.target.value);
+      }, 180);
+    });
   }
   if (mongoCatalogModal) {
     mongoCatalogModal.addEventListener('click', (e) => {
