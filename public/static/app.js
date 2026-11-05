@@ -242,6 +242,19 @@ const modalQuotaStatusBadge = document.getElementById('modal-quota-status-badge'
 const modalQuotaRenewRow = document.getElementById('modal-quota-renew-row');
 const modalQuotaRenewTime = document.getElementById('modal-quota-renew-time');
 
+// Delete Password Modal DOM
+const deletePasswordModal = document.getElementById('delete-password-modal');
+const closeDeleteModalBtn = document.getElementById('close-delete-modal-btn');
+const cancelDeleteModalBtn = document.getElementById('cancel-delete-modal-btn');
+const confirmDeleteModalBtn = document.getElementById('confirm-delete-modal-btn');
+const deletePasswordInput = document.getElementById('delete-password-input');
+const deleteTargetLabel = document.getElementById('delete-target-label');
+const deletePasswordError = document.getElementById('delete-password-error');
+const deletePasswordErrorText = document.getElementById('delete-password-error-text');
+const toggleDeletePwdEye = document.getElementById('toggle-delete-pwd-eye');
+const deletePwdEyeIcon = document.getElementById('delete-pwd-eye-icon');
+let deletePasswordResolve = null;
+
 let latestAiQuotaInfo = null;
 
 async function checkAiQuotaStatus(refresh = false) {
@@ -851,6 +864,33 @@ function setupEventListeners() {
   if (apiKeyModal) {
     apiKeyModal.addEventListener('click', (e) => {
       if (e.target === apiKeyModal) closeApiKeyModal();
+    });
+  }
+
+  // Delete Password Modal Listeners
+  if (closeDeleteModalBtn) closeDeleteModalBtn.addEventListener('click', () => closeDeletePasswordModal(false));
+  if (cancelDeleteModalBtn) cancelDeleteModalBtn.addEventListener('click', () => closeDeletePasswordModal(false));
+  if (confirmDeleteModalBtn) confirmDeleteModalBtn.addEventListener('click', handleConfirmDeleteModal);
+  if (deletePasswordModal) {
+    deletePasswordModal.addEventListener('click', (e) => {
+      if (e.target === deletePasswordModal) closeDeletePasswordModal(false);
+    });
+  }
+  if (deletePasswordInput) {
+    deletePasswordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleConfirmDeleteModal();
+      } else if (e.key === 'Escape') {
+        closeDeletePasswordModal(false);
+      }
+    });
+  }
+  if (toggleDeletePwdEye && deletePasswordInput && deletePwdEyeIcon) {
+    toggleDeletePwdEye.addEventListener('click', () => {
+      const isPwd = deletePasswordInput.type === 'password';
+      deletePasswordInput.type = isPwd ? 'text' : 'password';
+      deletePwdEyeIcon.className = isPwd ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
     });
   }
   if (copySharePinBtn) {
@@ -1750,16 +1790,17 @@ function showQuizResults() {
 }
 
 // ----------------------------------------------------
-// DELETE INDIVIDUAL QUESTION FROM QUIZ
+// DELETE INDIVIDUAL QUESTION FROM QUIZ (PASSWORD PROTECTED)
 // ----------------------------------------------------
 
-function handleDeleteSingleQuestion(questionId) {
+async function handleDeleteSingleQuestion(questionId) {
   if (!currentQuizData || !currentQuizData.questions) return;
 
   const targetIndex = currentQuizData.questions.findIndex((q, idx) => (q.id || idx + 1) == questionId);
   if (targetIndex === -1) return;
 
-  if (!confirm(`Delete question #${targetIndex + 1} from this quiz?`)) return;
+  const auth = await promptDeletePassword(`Question #${targetIndex + 1}: "${(currentQuizData.questions[targetIndex].question || '').slice(0, 45)}..."`);
+  if (!auth || !auth.success) return;
 
   // Remove question
   currentQuizData.questions.splice(targetIndex, 1);
@@ -1777,7 +1818,10 @@ function handleDeleteSingleQuestion(questionId) {
   // Auto-save the updated questions list to both localStorage and MongoDB in background
   autoSaveQuiz(currentQuizData).catch(() => {});
 
-  showToast('Question deleted from quiz & database synced.', 'success');
+  showToast(`Question #${targetIndex + 1} deleted successfully.`, 'success');
+  renderQuizQuestions();
+  updateQuestionCounter();
+  updateQuizViewDisplay();
   renderQuizPlayer();
   updateQuizScoreUI();
 }
@@ -2057,10 +2101,9 @@ function renderLibrarySections() {
   });
 }
 
-function handleDeleteSection(sectionName) {
-  if (!confirm(`Delete folder "${sectionName}"? Any saved quizzes in it will be moved to "General".`)) {
-    return;
-  }
+async function handleDeleteSection(sectionName) {
+  const auth = await promptDeletePassword(`Folder: "${sectionName}" (Quizzes will move to "General")`);
+  if (!auth || !auth.success) return;
 
   const quizzes = getSavedQuizzes();
   let updatedAny = false;
@@ -2081,10 +2124,10 @@ function handleDeleteSection(sectionName) {
     activeSectionFilter = 'All';
   }
 
-  populateSectionDropdown();
   renderLibrarySections();
   renderLibraryQuizzesGrid();
-  showToast(`Deleted folder "${sectionName}".`, 'success');
+  populateSectionSelects();
+  showToast(`Folder "${sectionName}" deleted. Quizzes moved to "General".`, 'success');
 }
 
 function renderLibraryQuizzesGrid() {
@@ -2753,6 +2796,169 @@ async function handlePushSingleQuizToMongo(quizId) {
   }
 }
 
+// ----------------------------------------------------
+// RESILIENT INDEXEDDB STORAGE FOR LARGE QUIZ DATASETS
+// Prevents 5MB localStorage QuotaExceededError
+// ----------------------------------------------------
+const QuizStorageDB = {
+  dbName: 'yt_transcript_quiz_db',
+  dbVersion: 1,
+  storeName: 'quizzes',
+  _db: null,
+
+  async getDB() {
+    if (this._db) return this._db;
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !window.indexedDB) {
+        return resolve(null);
+      }
+      try {
+        const req = window.indexedDB.open(this.dbName, this.dbVersion);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            db.createObjectStore(this.storeName, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => {
+          this._db = e.target.result;
+          resolve(this._db);
+        };
+        req.onerror = () => resolve(null);
+        req.onblocked = () => resolve(null);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  },
+
+  async putQuiz(quiz) {
+    if (!quiz || !quiz.id) return false;
+    try {
+      const db = await this.getDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        store.put(quiz);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  },
+
+  async getQuiz(id) {
+    if (!id) return null;
+    try {
+      const db = await this.getDB();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction([this.storeName], 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.get(id);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (_) {
+      return null;
+    }
+  },
+
+  async deleteQuiz(id) {
+    if (!id) return false;
+    try {
+      const db = await this.getDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        store.delete(id);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+};
+
+// ----------------------------------------------------
+// MASTER DELETE PASSWORD VERIFICATION MODAL HANDLERS
+// Validates against DELETE_PASSWORD in .env (siya)
+// ----------------------------------------------------
+function promptDeletePassword(itemDescription) {
+  return new Promise((resolve) => {
+    deletePasswordResolve = resolve;
+    if (!deletePasswordModal) return resolve({ success: true, password: '' });
+
+    if (deleteTargetLabel) deleteTargetLabel.textContent = itemDescription || 'Selected Item';
+    if (deletePasswordInput) {
+      deletePasswordInput.value = '';
+      deletePasswordInput.type = 'password';
+      if (deletePwdEyeIcon) deletePwdEyeIcon.className = 'fa-solid fa-eye';
+    }
+    if (deletePasswordError) deletePasswordError.classList.add('hidden');
+
+    deletePasswordModal.classList.remove('hidden');
+    if (deletePasswordInput) setTimeout(() => deletePasswordInput.focus(), 50);
+  });
+}
+
+function closeDeletePasswordModal(confirmed, password = null) {
+  if (deletePasswordModal) deletePasswordModal.classList.add('hidden');
+  if (deletePasswordResolve) {
+    deletePasswordResolve(confirmed ? { success: true, password: password } : null);
+    deletePasswordResolve = null;
+  }
+}
+
+async function handleConfirmDeleteModal() {
+  const entered = (deletePasswordInput?.value || '').trim();
+  if (!entered) {
+    if (deletePasswordError && deletePasswordErrorText) {
+      deletePasswordErrorText.textContent = 'Kripya delete password dalein (.env me DELETE_PASSWORD)';
+      deletePasswordError.classList.remove('hidden');
+    }
+    deletePasswordInput?.focus();
+    return;
+  }
+
+  if (confirmDeleteModalBtn) {
+    confirmDeleteModalBtn.disabled = true;
+    confirmDeleteModalBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-xs"></i> <span>Verifying...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/verify-delete-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: entered })
+    });
+    if (res.ok) {
+      closeDeletePasswordModal(true, entered);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (deletePasswordError && deletePasswordErrorText) {
+      deletePasswordErrorText.textContent = data.detail || 'Galat password! Sahi password dalein.';
+      deletePasswordError.classList.remove('hidden');
+    }
+    deletePasswordInput?.select();
+  } catch (e) {
+    if (deletePasswordError && deletePasswordErrorText) {
+      deletePasswordErrorText.textContent = 'Server verification error: ' + e.message;
+      deletePasswordError.classList.remove('hidden');
+    }
+  } finally {
+    if (confirmDeleteModalBtn) {
+      confirmDeleteModalBtn.disabled = false;
+      confirmDeleteModalBtn.innerHTML = '<i class="fa-solid fa-trash-can text-xs"></i> <span>Delete Confirm</span>';
+    }
+  }
+}
+
 function getSavedQuizzes() {
   try {
     const raw = localStorage.getItem('yt_saved_quizzes');
@@ -2764,55 +2970,26 @@ function getSavedQuizzes() {
 
 function saveSavedQuizzesLocally(quizzesList) {
   if (!Array.isArray(quizzesList)) return false;
+
+  // 1. Asynchronously persist full quizzes (with questions) into IndexedDB
+  quizzesList.forEach(q => {
+    if (q && q.id && q.questions && q.questions.length > 0) {
+      QuizStorageDB.putQuiz(q);
+    }
+  });
+
+  // 2. In localStorage, persist only lightweight metadata stubs to completely avoid 5MB quota exhaustion
   try {
-    localStorage.setItem('yt_saved_quizzes', JSON.stringify(quizzesList));
+    const metaOnly = quizzesList.map(q => {
+      const stub = { ...q };
+      delete stub.questions; // Keep localStorage metadata under 50KB total
+      return stub;
+    });
+    localStorage.setItem('yt_saved_quizzes', JSON.stringify(metaOnly));
     return true;
   } catch (err) {
-    console.warn('[LocalStorage Quota] Pruning questions from older quizzes to fit within browser storage...', err);
-    try {
-      // Safe Pruning Level 1: Keep full questions for top 3 recent quizzes; stub the rest
-      const pruned = quizzesList.map((q, idx) => {
-        if (idx >= 3 && q.questions && q.questions.length > 0) {
-          const stub = { ...q };
-          delete stub.questions;
-          stub.is_cloud_stub = true;
-          return stub;
-        }
-        return q;
-      });
-      localStorage.setItem('yt_saved_quizzes', JSON.stringify(pruned));
-      return true;
-    } catch (err2) {
-      // Safe Pruning Level 2: Keep full questions ONLY for top 1 active quiz
-      try {
-        const prunedUltra = quizzesList.map((q, idx) => {
-          if (idx >= 1 && q.questions && q.questions.length > 0) {
-            const stub = { ...q };
-            delete stub.questions;
-            stub.is_cloud_stub = true;
-            return stub;
-          }
-          return q;
-        });
-        localStorage.setItem('yt_saved_quizzes', JSON.stringify(prunedUltra));
-        return true;
-      } catch (err3) {
-        // Safe Pruning Level 3: Metadata only
-        try {
-          const metaOnly = quizzesList.map(q => {
-            const stub = { ...q };
-            delete stub.questions;
-            stub.is_cloud_stub = true;
-            return stub;
-          });
-          localStorage.setItem('yt_saved_quizzes', JSON.stringify(metaOnly));
-          return true;
-        } catch (err4) {
-          console.error('[LocalStorage Critical] Storage full even for metadata:', err4);
-          return false;
-        }
-      }
-    }
+    console.warn('[LocalStorage Quota] Storage write suppressed:', err);
+    return true;
   }
 }
 
@@ -2839,11 +3016,22 @@ function updateSavedQuizBadge() {
 
 async function loadSavedQuiz(quizId) {
   const quizzes = getSavedQuizzes();
-  const quiz = quizzes.find(q => q.id === quizId);
+  let quiz = quizzes.find(q => q.id === quizId);
   if (!quiz) return;
 
-  // If this quiz was pruned to save browser quota, fetch full questions from MongoDB
-  if (quiz.is_cloud_stub && (!quiz.questions || quiz.questions.length === 0) && (quiz.code || quiz.share_code)) {
+  // 1. Try to load full questions from IndexedDB
+  if (!quiz.questions || quiz.questions.length === 0) {
+    try {
+      const full = await QuizStorageDB.getQuiz(quizId);
+      if (full && full.questions && full.questions.length > 0) {
+        quiz.questions = full.questions;
+        if (full.score && !quiz.score) quiz.score = full.score;
+      }
+    } catch (_) {}
+  }
+
+  // 2. If still missing and has cloud code, fetch full questions from MongoDB
+  if ((!quiz.questions || quiz.questions.length === 0) && (quiz.code || quiz.share_code)) {
     const code = quiz.code || quiz.share_code;
     showToast(`Loading complete quiz [${code}] from MongoDB...`, 'info');
     try {
@@ -2851,11 +3039,16 @@ async function loadSavedQuiz(quizId) {
       if (res.ok) {
         const fullQuiz = await res.json();
         Object.assign(quiz, fullQuiz);
-        quiz.is_cloud_stub = false;
+        QuizStorageDB.putQuiz(quiz);
       }
     } catch (e) {
       console.warn('Failed to fetch full cloud quiz for stub:', e);
     }
+  }
+
+  if (!quiz.questions || quiz.questions.length === 0) {
+    showToast('Quiz questions could not be loaded. Please sync from MongoDB or re-import.', 'error');
+    return;
   }
 
   currentQuizData = quiz;
@@ -2874,28 +3067,41 @@ async function loadSavedQuiz(quizId) {
   showToast(`Loaded "${quiz.title}"! Ready to practice.`, 'success');
 }
 
-function deleteSavedQuiz(quizId) {
-  if (!confirm('Are you sure you want to delete this saved quiz?')) return;
+async function deleteSavedQuiz(quizId) {
+  const quizzes = getSavedQuizzes();
+  const targetQuiz = quizzes.find(q => q.id === quizId);
+  const quizTitle = targetQuiz ? targetQuiz.title : 'Saved Quiz';
+
+  const auth = await promptDeletePassword(`Quiz: "${quizTitle}"`);
+  if (!auth || !auth.success) return;
+
   const deletedIds = JSON.parse(localStorage.getItem('yt_deleted_quizzes') || '[]');
   if (!deletedIds.includes(quizId)) {
     deletedIds.push(quizId);
-    localStorage.setItem('yt_deleted_quizzes', JSON.stringify(deletedIds));
+    try {
+      localStorage.setItem('yt_deleted_quizzes', JSON.stringify(deletedIds));
+    } catch (_) {}
   }
 
-  let quizzes = getSavedQuizzes().filter(q => q.id !== quizId);
-  saveSavedQuizzesLocally(quizzes);
+  let remaining = quizzes.filter(q => q.id !== quizId);
+  saveSavedQuizzesLocally(remaining);
+  QuizStorageDB.deleteQuiz(quizId);
   updateSavedQuizBadge();
   renderLibrarySections();
   renderLibraryQuizzesGrid();
 
-  // If logged in, also delete from cloud MongoDB
-  if (currentUser && currentUser.username) {
+  // Also delete from cloud MongoDB if applicable
+  try {
     fetch('/api/quiz/delete', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: quizId, username: currentUser.username })
+      body: JSON.stringify({
+        id: quizId,
+        username: currentUser ? currentUser.username : null,
+        password: auth.password
+      })
     }).then(() => updateCloudCount()).catch(() => {});
-  }
+  } catch (_) {}
 
   showToast('Quiz deleted from library.', 'success');
 }

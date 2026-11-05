@@ -1189,9 +1189,21 @@ class QuizImportPayload(BaseModel):
     username: Optional[str] = None
     section: Optional[str] = None
 
+class VerifyDeletePasswordRequest(BaseModel):
+    password: str
+
 class QuizDeletePayload(BaseModel):
     id: str
     username: Optional[str] = None
+    password: Optional[str] = None
+
+def get_delete_password() -> str:
+    try:
+        from quiz_generator import load_env_file
+        load_env_file()
+    except Exception:
+        pass
+    return os.environ.get("DELETE_PASSWORD", "siya").strip()
 
 class QuizUpdatePayload(BaseModel):
     id: str
@@ -1623,8 +1635,20 @@ def import_quiz_by_code(payload: QuizImportPayload):
         "username": username
     }
 
+@app.post("/api/verify-delete-password")
+def verify_delete_password_endpoint(payload: VerifyDeletePasswordRequest):
+    req_pwd = (payload.password or "").strip()
+    correct_pwd = get_delete_password()
+    if req_pwd == correct_pwd:
+        return {"valid": True, "message": "Password verified successfully"}
+    raise HTTPException(status_code=403, detail="Galat password! Please enter correct password.")
+
 @app.delete("/api/quiz/delete")
 def delete_quiz_endpoint(payload: QuizDeletePayload):
+    req_pwd = (payload.password or "").strip()
+    correct_pwd = get_delete_password()
+    if req_pwd != correct_pwd:
+        raise HTTPException(status_code=403, detail="Galat password! Delete karne ke liye password sahi hona chahiye.")
     get_mongo()
     username = sanitize_username(payload.username) if payload.username else None
     clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', str(payload.id))[:64]

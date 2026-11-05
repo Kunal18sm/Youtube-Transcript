@@ -47,11 +47,13 @@ def get_gemini_api_key() -> Optional[str]:
 
 # Prioritize active, high-rate-limit models confirmed supported by Google Gemini API
 MODELS_TO_TRY = [
-    "gemini-flash-latest",
     "gemini-flash-lite-latest",
-    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite-preview",
     "gemini-3.1-flash-lite",
-    "gemini-3-flash-preview"
+    "gemini-3.8-flash",
+    "gemini-flash-latest"
 ]
 
 last_quota_error = None
@@ -182,8 +184,9 @@ def call_gemini(prompt: str, api_key: str = None, temperature: float = 0.2) -> L
                     elif res.status_code == 429:
                         last_error = f"Model {model} returned 429"
                         if "RESOURCE_EXHAUSTED" in res.text or "quota" in res.text.lower():
-                            last_quota_error = "Gemini Free Tier daily quota limit exceeded. Please wait a short while or add another key in .env file."
-                        time.sleep(1.5 * (attempt + 1))
+                            last_quota_error = "Gemini Free Tier daily quota limit exceeded. Rotating to alternate model/key..."
+                        time.sleep(0.4)
+                        break
                     elif res.status_code == 503:
                         last_error = f"Model {model} returned 503"
                         time.sleep(1.0)
