@@ -18,8 +18,7 @@ def load_env_file():
                     k, v = line.split("=", 1)
                     k = k.strip()
                     v = v.strip().strip("'\"")
-                    if k not in os.environ:
-                        os.environ[k] = v
+                    os.environ[k] = v
 
 load_env_file()
 
