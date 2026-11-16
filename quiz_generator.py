@@ -48,12 +48,7 @@ def get_gemini_api_key() -> Optional[str]:
 # Prioritize active, high-rate-limit models confirmed supported by Google Gemini API
 MODELS_TO_TRY = [
     "gemini-flash-lite-latest",
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-flash-latest"
+    "gemini-3.5-flash-lite"
 ]
 
 last_quota_error = None
@@ -162,7 +157,7 @@ def call_gemini(prompt: str, api_key: str = None, temperature: float = 0.2) -> L
 
             for attempt in range(2):
                 try:
-                    res = requests.post(url, json=payload, timeout=45)
+                    res = requests.post(url, json=payload, timeout=15)
                     if res.status_code == 200:
                         data = res.json()
                         candidates = data.get("candidates", [])
@@ -449,6 +444,7 @@ def generate_mcq_quiz(
 
     all_raw_questions = []
 
+    all_api_keys = get_gemini_api_keys()
     # Parallel execution with ThreadPoolExecutor (max 4 concurrent workers to strictly avoid 429 burst rate limits)
     workers = min(4, len(chunks))
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -458,7 +454,7 @@ def generate_mcq_quiz(
                 chunk,
                 questions_per_batch,
                 difficulty,
-                api_key
+                all_api_keys[idx % len(all_api_keys)] if all_api_keys else api_key
             ): idx for idx, chunk in enumerate(chunks)
         }
 
