@@ -274,6 +274,24 @@ def normalize_mcq(item: Dict[str, Any], default_id: int) -> Optional[Dict[str, A
     if not verified_fact:
         verified_fact = "Fact-checked against verified lecture concepts and academic syllabus."
 
+    explanation_str = str(item.get("explanation") or "").strip()
+    evidence_text = f"{verified_fact} {explanation_str}".lower()
+
+    # Reconcile correct_answer with verified evidence:
+    # If the LLM assigned an option letter whose text does not appear in the evidence,
+    # but another unique option text is explicitly stated in verified_fact or explanation:
+    candidate_matches = []
+    for i, opt in enumerate(clean_options):
+        opt_text = opt[3:].strip().lower()
+        if not opt_text or opt_text == "none of the above" or len(opt_text) < 2:
+            continue
+        if re.search(r'\b' + re.escape(opt_text) + r'\b', evidence_text):
+            candidate_matches.append(letters[i])
+
+    if candidate_matches and correct_letter not in candidate_matches:
+        if len(candidate_matches) == 1:
+            correct_letter = candidate_matches[0]
+
     return {
         "id": default_id,
         "question": str(q_text).strip(),
@@ -366,6 +384,7 @@ CRITICAL EXAM RULES & INSTRUCTIONS:
    - Exactly ONE option is unambiguously correct according to the lecture facts.
    - 3 plausible, high-quality exam distractors (avoid silly or obvious fake choices).
    - "correct_answer": Must be the single capital letter ("A", "B", "C", or "D") of the right option.
+   - CRITICAL ANSWER-FACT HARMONY: The "correct_answer" letter MUST strictly point to the option that contains the exact truth stated in "verified_fact" and "explanation". If "verified_fact" states the answer is "Three", the option containing "Three" MUST be the "correct_answer". NEVER mismatch the correct option letter with the verified evidence.
 
 4. ACADEMIC EVIDENCE & EXPLANATION:
    - "explanation": Crisp 1-2 sentence solution explaining why the correct option is right, in SSC exam answer-key style.

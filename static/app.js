@@ -1597,24 +1597,47 @@ function renderQuizPlayer() {
         ${qOptions.map((opt) => {
           const letter = opt.trim().charAt(0).toUpperCase();
           const cleanOptText = opt.replace(/^[A-D]\)\s*/, '');
+          const answeredLetter = quizUserAnswers[qid];
+          const correctLetter = (q.correct_answer || '').trim().charAt(0).toUpperCase();
+          
+          let btnClass = 'quiz-option-btn text-left p-3 rounded-2xl border text-xs sm:text-sm text-slate-200 transition-all flex items-start gap-2.5 group ';
+          let iconHtml = '<i class="option-icon hidden text-sm mt-0.5 shrink-0"></i>';
+          let disabledAttr = '';
+
+          if (answeredLetter) {
+            disabledAttr = 'disabled';
+            if (letter === correctLetter) {
+              btnClass += 'bg-emerald-950/70 border-emerald-500 text-emerald-300';
+              iconHtml = '<i class="option-icon fa-solid fa-circle-check text-emerald-400 text-sm mt-0.5 shrink-0"></i>';
+            } else if (letter === answeredLetter) {
+              btnClass += 'bg-rose-950/70 border-rose-500 text-rose-300';
+              iconHtml = '<i class="option-icon fa-solid fa-circle-xmark text-rose-400 text-sm mt-0.5 shrink-0"></i>';
+            } else {
+              btnClass += 'bg-surface-900 border-surface-800 opacity-40';
+            }
+          } else {
+            btnClass += 'bg-surface-900 hover:bg-surface-800 border-surface-800 cursor-pointer';
+          }
+
           return `
             <button 
-              class="quiz-option-btn text-left p-3 rounded-2xl bg-surface-900 hover:bg-surface-800 border border-surface-800 text-xs sm:text-sm text-slate-200 transition-all cursor-pointer flex items-start gap-2.5 group"
+              class="${btnClass}"
               data-qid="${qid}"
               data-letter="${letter}"
+              ${disabledAttr}
             >
               <span class="shrink-0 w-5 h-5 rounded-md bg-surface-950 text-slate-300 font-mono font-bold text-xs flex items-center justify-center group-hover:bg-amber-500 group-hover:text-black transition-colors">
                 ${letter}
               </span>
               <span class="flex-1 mt-0.5">${escapeHtml(cleanOptText)}</span>
-              <i class="option-icon hidden text-sm mt-0.5 shrink-0"></i>
+              ${iconHtml}
             </button>
           `;
         }).join('')}
       </div>
 
       <!-- Explanation Box -->
-      <div id="explanation-${qid}" class="hidden p-3.5 rounded-2xl bg-surface-900 border border-surface-800 text-xs text-slate-300 animate-fadeIn space-y-2">
+      <div id="explanation-${qid}" class="${quizUserAnswers[qid] ? '' : 'hidden'} p-3.5 rounded-2xl bg-surface-900 border border-surface-800 text-xs text-slate-300 animate-fadeIn space-y-2">
         <div class="flex items-center justify-between text-xs pb-1 border-b border-surface-850">
           <strong class="text-white flex items-center gap-1.5">
             <i class="fa-solid fa-lightbulb text-amber-400"></i> Explanation & Solution
@@ -1858,11 +1881,26 @@ async function handleDeleteSingleQuestion(questionId) {
   const auth = await promptDeletePassword(`Question #${targetIndex + 1}: "${(currentQuizData.questions[targetIndex].question || '').slice(0, 45)}..."`);
   if (!auth || !auth.success) return;
 
-  // Remove question
-  currentQuizData.questions.splice(targetIndex, 1);
-  delete quizUserAnswers[questionId];
+  // 1. Shift user answers so keys strictly match re-indexed questions (1-based)
+  const deletedQid = targetIndex + 1;
+  const shiftedAnswers = {};
+  Object.keys(quizUserAnswers).forEach(key => {
+    const numKey = parseInt(key, 10);
+    if (!isNaN(numKey)) {
+      if (numKey < deletedQid) {
+        shiftedAnswers[numKey] = quizUserAnswers[key];
+      } else if (numKey > deletedQid) {
+        shiftedAnswers[numKey - 1] = quizUserAnswers[key];
+      }
+      // deleted question answer is discarded
+    }
+  });
+  quizUserAnswers = shiftedAnswers;
 
-  // Re-index remaining questions
+  // 2. Remove question from array
+  currentQuizData.questions.splice(targetIndex, 1);
+
+  // 3. Re-index remaining questions strictly 1..N
   currentQuizData.questions.forEach((q, idx) => {
     q.id = idx + 1;
   });
@@ -1871,14 +1909,28 @@ async function handleDeleteSingleQuestion(questionId) {
     currentQuestionIndex = Math.max(0, currentQuizData.questions.length - 1);
   }
 
-  // Auto-save the updated questions list to both localStorage and MongoDB in background
+  // 4. Recalculate quiz scores based on current answers
+  quizScore.correct = 0;
+  quizScore.wrong = 0;
+  currentQuizData.questions.forEach((q, idx) => {
+    const qid = q.id || idx + 1;
+    const ans = quizUserAnswers[qid];
+    if (ans) {
+      const corr = (q.correct_answer || '').trim().charAt(0).toUpperCase();
+      if (ans === corr) {
+        quizScore.correct++;
+      } else {
+        quizScore.wrong++;
+      }
+    }
+  });
+
+  // 5. Auto-save the updated questions list to both localStorage and MongoDB in background
   autoSaveQuiz(currentQuizData).catch(() => {});
 
   showToast(`Question #${targetIndex + 1} deleted successfully.`, 'success');
-  renderQuizQuestions();
-  updateQuestionCounter();
-  updateQuizViewDisplay();
   renderQuizPlayer();
+  updateQuizViewDisplay();
   updateQuizScoreUI();
 }
 

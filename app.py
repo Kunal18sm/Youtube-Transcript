@@ -9,6 +9,7 @@ import time
 import json
 import hashlib
 import secrets
+import threading
 from typing import Optional, List, Dict, Any
 import requests
 import yt_dlp
@@ -763,9 +764,11 @@ def batch_translate_endpoint(req: BatchTranslateRequest):
                 pass
     return {"translations": results}
 
-# FastAPI Local Endpoints
-@app.get("/api/health")
-@app.get("/api/status")
+# FastAPI Local & Render Health/Ping Endpoints (supports GET & HEAD for UptimeRobot)
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+@app.api_route("/api/status", methods=["GET", "HEAD"])
+@app.api_route("/healthz", methods=["GET", "HEAD"])
+@app.api_route("/ping", methods=["GET", "HEAD"])
 def health_check():
     u_col, _ = get_mongo()
     mongo_status = "connected" if u_col is not None else "offline"
@@ -1747,14 +1750,14 @@ def get_icon512():
         p = os.path.join(BASE_DIR, "static", "icon-512.png")
     return FileResponse(p)
 
-@app.get("/favicon.ico")
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
 def get_favicon():
     p = os.path.join(BASE_DIR, "public", "icon-192.png")
     if not os.path.exists(p):
         p = os.path.join(BASE_DIR, "static", "icon-192.png")
     return FileResponse(p, media_type="image/png")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
     candidates = [
         os.path.join(BASE_DIR, "public", "index.html"),
@@ -1767,6 +1770,37 @@ def serve_index():
                 headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
             )
     return {"message": "YouTube Transcript Pro API is running"}
+
+def _render_keepalive_worker():
+    """
+    Background worker that pings the Render Web Service's external public URL
+    every 8-9 minutes to keep Render Free Tier alive.
+    Render free instances spin down after 15 minutes of inactivity.
+    Render automatically populates RENDER_EXTERNAL_URL=https://<app>.onrender.com
+    """
+    time.sleep(20) # Initial grace period
+    while True:
+        external_url = (
+            os.getenv("RENDER_EXTERNAL_URL", "").strip() or
+            os.getenv("APP_URL", "").strip() or
+            os.getenv("PUBLIC_URL", "").strip()
+        )
+        if external_url:
+            if not external_url.startswith("http://") and not external_url.startswith("https://"):
+                external_url = f"https://{external_url}"
+            target_ping = f"{external_url.rstrip('/')}/api/health"
+            try:
+                requests.get(
+                    target_ping,
+                    headers={"User-Agent": "Render-KeepAlive/1.0"},
+                    timeout=15
+                )
+            except Exception:
+                pass
+        time.sleep(500) # Ping every ~8.3 minutes (well below Render's 15 min sleep limit)
+
+_keepalive_thread = threading.Thread(target=_render_keepalive_worker, daemon=True, name="RenderKeepAlive")
+_keepalive_thread.start()
 
 if __name__ == "__main__":
     import uvicorn
