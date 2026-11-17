@@ -687,58 +687,73 @@
       <!-- ============================================================== -->
       <section id="page-library" class="page-view hidden space-y-6 sm:space-y-7">
         
-        <!-- Library Header Card (Clean, Spacious, Responsive Dark & Rose) -->
-        <div class="bg-surface-900 border border-surface-750 rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 shrink-0">
-              <i class="fa-solid fa-bookmark text-sm"></i>
+        <!-- Library Header Card (Collapsible Actions Bar - Minimized by default) -->
+        <div id="library-header-card" class="bg-surface-900 border border-surface-750 rounded-3xl p-3.5 sm:p-4 shadow-xl transition-all duration-300">
+          
+          <!-- Header Bar: Clickable to toggle actions drawer -->
+          <div id="toggle-library-actions-btn" class="flex items-center justify-between cursor-pointer select-none group">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 shrink-0 group-hover:scale-105 transition-transform">
+                <i class="fa-solid fa-bookmark text-sm"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-sm sm:text-base font-extrabold text-white leading-tight">Quiz Library</h2>
+                  <span id="library-actions-indicator-badge" class="px-2 py-0.5 rounded-full bg-surface-800 text-[10px] font-semibold text-slate-400 border border-surface-700">Actions</span>
+                </div>
+                <p class="text-[10px] sm:text-[11px] text-slate-400">Click to show/hide options & tools</p>
+              </div>
             </div>
-            <div>
-              <h2 class="text-base font-extrabold text-white leading-tight">Quiz Library</h2>
-              <p class="text-[11px] text-slate-400">Select multiple sets to create custom practice tests</p>
-            </div>
+
+            <!-- Toggle Arrow / Chevron -->
+            <button type="button" class="w-8 h-8 rounded-xl bg-surface-800 group-hover:bg-surface-750 text-slate-300 group-hover:text-white border border-surface-700 flex items-center justify-center transition-all shrink-0">
+              <i id="library-actions-chevron" class="fa-solid fa-chevron-down text-xs transition-transform duration-300"></i>
+            </button>
           </div>
 
-          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto pt-1 sm:pt-0">
-            <!-- Combine Multiple Sets into Custom Test (30, 50, 100 Qs) -->
-            <button id="open-custom-test-modal-btn" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Combine multiple quiz sets into a custom test (30, 50, 100 questions)">
-              <i class="fa-solid fa-layer-group text-[10px]"></i>
-              <span>Combine</span>
-              <span id="custom-test-btn-badge" class="hidden px-1.5 py-0.2 rounded-full bg-black/40 text-[9px] font-mono font-bold">0</span>
-            </button>
+          <!-- Collapsible Options Drawer (Hidden by default as requested) -->
+          <div id="library-actions-drawer" class="hidden pt-3 sm:pt-4 border-t border-surface-800/80 mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <!-- Combine Multiple Sets into Custom Test (30, 50, 100 Qs) -->
+              <button id="open-custom-test-modal-btn" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer" title="Combine multiple quiz sets into a custom test (30, 50, 100 questions)">
+                <i class="fa-solid fa-layer-group text-[10px]"></i>
+                <span>Combine</span>
+                <span id="custom-test-btn-badge" class="hidden px-1.5 py-0.2 rounded-full bg-black/40 text-[9px] font-mono font-bold">0</span>
+              </button>
 
-            <!-- MongoDB Catalog -->
-            <button id="open-mongo-catalog-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="View all quizzes saved in MongoDB Cloud">
-              <i class="fa-solid fa-cloud text-[11px] text-slate-400"></i>
-              <span>Cloud</span>
-            </button>
+              <!-- MongoDB Catalog -->
+              <button id="open-mongo-catalog-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="View all quizzes saved in MongoDB Cloud">
+                <i class="fa-solid fa-cloud text-[11px] text-slate-400"></i>
+                <span>Cloud</span>
+              </button>
 
-            <!-- Push ALL Quizzes to MongoDB -->
-            <button id="push-all-quizzes-mongo-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to Cloud">
-              <i class="fa-solid fa-cloud-arrow-up text-[11px] text-slate-400"></i>
-              <span id="push-all-quizzes-label">Push All</span>
-            </button>
+              <!-- Push ALL Quizzes to MongoDB -->
+              <button id="push-all-quizzes-mongo-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Upload & Sync ALL local quizzes to Cloud">
+                <i class="fa-solid fa-cloud-arrow-up text-[11px] text-slate-400"></i>
+                <span id="push-all-quizzes-label">Push All</span>
+              </button>
 
-            <button id="import-code-modal-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Import quiz using 6-digit code">
-              <i class="fa-solid fa-key text-[11px] text-slate-400"></i>
-              <span>Import</span>
-            </button>
+              <button id="import-code-modal-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Import quiz using 6-digit code">
+                <i class="fa-solid fa-key text-[11px] text-slate-400"></i>
+                <span>Import</span>
+              </button>
 
-            <button id="create-section-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-folder-plus text-[11px] text-rose-500"></i>
-              <span>+ Folder</span>
-            </button>
+              <button id="create-section-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-folder-plus text-[11px] text-rose-500"></i>
+                <span>+ Folder</span>
+              </button>
 
-            <button id="library-sync-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Sync with Cloud">
-              <i class="fa-solid fa-arrows-rotate text-[11px] text-slate-400"></i>
-              <span>Sync</span>
-            </button>
+              <button id="library-sync-btn" class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer" title="Sync with Cloud">
+                <i class="fa-solid fa-arrows-rotate text-[11px] text-slate-400"></i>
+                <span>Sync</span>
+              </button>
 
-            <label class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-upload text-[11px] text-slate-400"></i>
-              <span>JSON</span>
-              <input type="file" id="import-quiz-file" accept=".json" class="hidden">
-            </label>
+              <label class="px-2.5 py-1.5 bg-surface-800 hover:bg-surface-750 text-slate-300 hover:text-white border border-surface-700/80 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-upload text-[11px] text-slate-400"></i>
+                <span>JSON</span>
+                <input type="file" id="import-quiz-file" accept=".json" class="hidden">
+              </label>
+            </div>
           </div>
         </div>
 
@@ -1400,6 +1415,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="/static/app.js?v=6.5.3"></script>
+  <script src="/static/app.js?v=6.5.4"></script>
 </body>
 </html>

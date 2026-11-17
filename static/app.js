@@ -4622,3 +4622,21 @@ window.addEventListener('keydown', (e) => {
     closeCustomTestModal();
   }
 });
+
+// Toggle Library Actions Drawer (Minimize / Expand)
+const toggleLibraryActionsBtn = document.getElementById('toggle-library-actions-btn');
+const libraryActionsDrawer = document.getElementById('library-actions-drawer');
+const libraryActionsChevron = document.getElementById('library-actions-chevron');
+
+if (toggleLibraryActionsBtn && libraryActionsDrawer) {
+  toggleLibraryActionsBtn.addEventListener('click', () => {
+    const isHidden = libraryActionsDrawer.classList.contains('hidden');
+    if (isHidden) {
+      libraryActionsDrawer.classList.remove('hidden');
+      if (libraryActionsChevron) libraryActionsChevron.classList.add('rotate-180');
+    } else {
+      libraryActionsDrawer.classList.add('hidden');
+      if (libraryActionsChevron) libraryActionsChevron.classList.remove('rotate-180');
+    }
+  });
+}
