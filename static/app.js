@@ -120,6 +120,34 @@ const pushAllQuizzesMongoBtn = document.getElementById('push-all-quizzes-mongo-b
 const pushAllQuizzesLabel = document.getElementById('push-all-quizzes-label');
 const emptyImportCodeBtn = document.getElementById('empty-import-code-btn');
 
+// Multi-Set Quiz Custom Test Generator DOM Elements
+const openCustomTestModalBtn = document.getElementById('open-custom-test-modal-btn');
+const customTestBtnBadge = document.getElementById('custom-test-btn-badge');
+const librarySelectionToolbar = document.getElementById('library-selection-toolbar');
+const selectAllQuizzesBtn = document.getElementById('select-all-quizzes-btn');
+const clearSelectedQuizzesBtn = document.getElementById('clear-selected-quizzes-btn');
+const librarySelectionStatus = document.getElementById('library-selection-status');
+const quickStartCombinedTestBtn = document.getElementById('quick-start-combined-test-btn');
+const quickStartBtnLabel = document.getElementById('quick-start-btn-label');
+const quickOpenBuilderBtn = document.getElementById('quick-open-builder-btn');
+const customTestModal = document.getElementById('custom-test-modal');
+const closeCustomTestModalBtn = document.getElementById('close-custom-test-modal-btn');
+const cancelCustomTestBtn = document.getElementById('cancel-custom-test-btn');
+const modalSelectAllBtn = document.getElementById('modal-select-all-btn');
+const modalDeselectAllBtn = document.getElementById('modal-deselect-all-btn');
+const modalQuizSearch = document.getElementById('modal-quiz-search');
+const modalQuizzesList = document.getElementById('modal-quizzes-list');
+const modalSelectionCountText = document.getElementById('modal-selection-count-text');
+const modalTotalQPoolText = document.getElementById('modal-total-q-pool-text');
+const modalCustomQInput = document.getElementById('modal-custom-q-input');
+const modalShuffleToggle = document.getElementById('modal-shuffle-toggle');
+const modalTestSummaryBadge = document.getElementById('modal-test-summary-badge');
+const startCustomTestBtn = document.getElementById('start-custom-test-btn');
+const startTestBtnLabel = document.getElementById('start-test-btn-label');
+
+let selectedQuizIds = new Set();
+let selectedQuestionTarget = 30; // '30', '50', '100', 'all', or custom number
+
 // MongoDB Cloud Catalog & Library Sorting DOM
 const openMongoCatalogBtn = document.getElementById('open-mongo-catalog-btn');
 const closeMongoCatalogBtn = document.getElementById('close-mongo-catalog-btn');
@@ -1551,6 +1579,12 @@ function renderQuizPlayer() {
             ${idx + 1}
           </span>
           <span class="text-[11px] text-slate-400 font-medium">${q.difficulty || 'Concept'}</span>
+          ${q.origin_quiz_title ? `
+            <span class="text-[10px] text-rose-300 bg-rose-950/40 border border-rose-800/40 px-2 py-0.5 rounded-lg truncate max-w-[150px] hidden sm:inline-flex items-center gap-1" title="From: ${escapeHtml(q.origin_quiz_title)}">
+              <i class="fa-solid fa-layer-group text-[8px] text-rose-400"></i>
+              <span class="truncate">${escapeHtml(q.origin_quiz_title)}</span>
+            </span>
+          ` : ''}
         </div>
 
         <div class="flex items-center gap-1.5 sm:gap-2">
@@ -2296,33 +2330,53 @@ function renderLibraryQuizzesGrid() {
   }
 
   quizzes.forEach((quiz) => {
+    const isSelected = selectedQuizIds.has(quiz.id);
+    const totalQCount = quiz.total_questions || (quiz.questions ? quiz.questions.length : 0);
     const card = document.createElement('div');
-    card.className = 'p-4 rounded-2xl bg-surface-900 border border-surface-800 hover:border-surface-700 transition-all shadow-lg flex flex-col justify-between gap-3 relative';
+    card.id = `lib-card-${quiz.id}`;
+    card.className = `p-4 sm:p-5 rounded-3xl bg-surface-900 border ${
+      isSelected 
+        ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/15' 
+        : 'border-surface-800 hover:border-surface-750'
+    } transition-all shadow-xl flex flex-col justify-between gap-3.5 relative`;
 
     card.innerHTML = `
       <div>
-        <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
-          <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2.5 py-0.5 rounded-full text-[10px]">
-            ${quiz.total_questions} Concept MCQs
-          </span>
-          <span class="text-[10px] text-slate-500">${quiz.savedAt}</span>
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-2.5">
+          <label class="flex items-center gap-2.5 cursor-pointer select-none group" title="Select for combined test">
+            <!-- Hidden native input to avoid white native Android checkbox -->
+            <input type="checkbox" class="quiz-card-select-cb sr-only" data-id="${quiz.id}" ${isSelected ? 'checked' : ''}>
+            <!-- Custom Black Checkbox Box -->
+            <div class="custom-card-cb w-4 h-4 rounded-md bg-surface-950 border ${isSelected ? 'bg-rose-600 border-rose-500 text-white' : 'border-surface-600 text-transparent group-hover:border-rose-400'} flex items-center justify-center transition-all shrink-0 shadow-inner">
+              <i class="fa-solid fa-check text-[10px] ${isSelected ? 'opacity-100' : 'opacity-0'}"></i>
+            </div>
+            <span class="text-slate-300 font-semibold bg-surface-800 border border-surface-700 px-2.5 py-0.5 rounded-full text-[10px] group-hover:border-rose-500/50 transition-colors">
+              ${totalQCount} MCQs
+            </span>
+          </label>
+          <div class="flex items-center gap-1.5">
+            ${quiz.section && quiz.section !== 'General' ? `
+              <span class="text-[9px] text-cyan-400 font-mono bg-cyan-950/40 border border-cyan-800/40 px-1.5 py-0.2 rounded">${escapeHtml(quiz.section)}</span>
+            ` : ''}
+            <span class="text-[10px] text-slate-500">${quiz.savedAt || ''}</span>
+          </div>
         </div>
 
-        <h4 class="font-bold text-white text-sm line-clamp-2 leading-snug" id="lib-title-${quiz.id}">
+        <h4 class="font-bold text-white text-sm line-clamp-2 leading-relaxed" id="lib-title-${quiz.id}">
           ${escapeHtml(quiz.title)}
         </h4>
 
         ${quiz.score ? `
-          <div class="mt-2 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-xl font-bold text-[10px]">
+          <div class="mt-2.5 inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-xl font-bold text-[10px]">
             <i class="fa-solid fa-trophy text-[9px]"></i> Score: ${quiz.score}
           </div>
         ` : ''}
       </div>
 
-      <div class="flex items-center justify-between pt-2.5 border-t border-surface-800 gap-1.5">
-        <button class="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 play-saved-btn" data-id="${quiz.id}">
-          <i class="fa-solid fa-play text-[9px]"></i>
-          <span>Start Practice Arena</span>
+      <div class="flex items-center justify-between pt-3 border-t border-surface-800">
+        <button class="px-3.5 py-1.5 bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 play-saved-btn shadow-sm" data-id="${quiz.id}">
+          <i class="fa-solid fa-play text-[8px] text-rose-400"></i>
+          <span>Start</span>
         </button>
 
         <!-- 3-Dot Kebab Menu Container -->
@@ -2445,6 +2499,21 @@ function renderLibraryQuizzesGrid() {
       deleteSavedQuiz(btn.dataset.id);
     });
   });
+
+  // Attach card checkbox select for multi-quiz test builder
+  document.querySelectorAll('.quiz-card-select-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const qid = cb.dataset.id;
+      if (cb.checked) {
+        selectedQuizIds.add(qid);
+      } else {
+        selectedQuizIds.delete(qid);
+      }
+      updateMultiSelectUI();
+    });
+  });
+
+  updateMultiSelectUI();
 }
 
 let currentEditModalContext = null; // { type: 'active' } or { type: 'library', quizId: '...' }
@@ -3207,6 +3276,8 @@ async function deleteSavedQuiz(quizId) {
   let remaining = quizzes.filter(q => q.id !== quizId);
   saveSavedQuizzesLocally(remaining);
   QuizStorageDB.deleteQuiz(quizId);
+  selectedQuizIds.delete(quizId);
+  updateMultiSelectUI();
   updateSavedQuizBadge();
   renderLibrarySections();
   renderLibraryQuizzesGrid();
@@ -4116,3 +4187,438 @@ async function syncQuizzesWithCloud(silent = false) {
     if (!silent) showToast('Could not sync with MongoDB Cloud. Offline quizzes available.', 'error');
   }
 }
+
+
+// ----------------------------------------------------
+// MULTI-SET QUIZ COMBINER & CUSTOM TEST GENERATOR
+// ----------------------------------------------------
+
+async function fetchFullQuizQuestions(quizStub) {
+  if (!quizStub) return [];
+  if (Array.isArray(quizStub.questions) && quizStub.questions.length > 0) {
+    return quizStub.questions;
+  }
+  try {
+    const full = await QuizStorageDB.getQuiz(quizStub.id);
+    if (full && Array.isArray(full.questions) && full.questions.length > 0) {
+      quizStub.questions = full.questions;
+      return full.questions;
+    }
+  } catch (e) {
+    console.warn('IndexedDB load error for quiz:', quizStub.id, e);
+  }
+  const code = quizStub.code || quizStub.share_code;
+  if (code) {
+    try {
+      const res = await fetch(`/api/quiz/shared/${code}`);
+      if (res.ok) {
+        const fullQuiz = await res.json();
+        if (fullQuiz && Array.isArray(fullQuiz.questions) && fullQuiz.questions.length > 0) {
+          quizStub.questions = fullQuiz.questions;
+          QuizStorageDB.putQuiz(fullQuiz);
+          return fullQuiz.questions;
+        }
+      }
+    } catch (e) {
+      console.warn('Cloud fetch error for quiz code:', code, e);
+    }
+  }
+  return [];
+}
+
+function updateMultiSelectUI() {
+  const allQuizzes = getSavedQuizzes();
+  const selectedList = allQuizzes.filter(q => selectedQuizIds.has(q.id));
+  const totalPool = selectedList.reduce((sum, q) => sum + (q.total_questions || (q.questions ? q.questions.length : 0)), 0);
+
+  // 1. Update Header Button Badge
+  if (customTestBtnBadge) {
+    if (selectedQuizIds.size > 0) {
+      customTestBtnBadge.textContent = selectedQuizIds.size;
+      customTestBtnBadge.classList.remove('hidden');
+    } else {
+      customTestBtnBadge.classList.add('hidden');
+    }
+  }
+
+  // 2. Update Toolbar
+  if (librarySelectionToolbar && librarySelectionStatus) {
+    if (selectedQuizIds.size > 0) {
+      librarySelectionToolbar.classList.remove('hidden');
+      librarySelectionStatus.textContent = `${selectedQuizIds.size} ${selectedQuizIds.size === 1 ? 'set' : 'sets'} (${totalPool} Qs)`;
+    } else {
+      librarySelectionToolbar.classList.add('hidden');
+    }
+  }
+
+  // Calculate actual test questions count
+  let actualTestCount = totalPool;
+  if (selectedQuestionTarget !== 'all') {
+    const targetNum = parseInt(selectedQuestionTarget, 10);
+    if (!isNaN(targetNum) && targetNum > 0) {
+      actualTestCount = Math.min(targetNum, totalPool || targetNum);
+    }
+  }
+
+  // Update Toolbar Quick Question Buttons style
+  document.querySelectorAll('.quick-q-btn').forEach(btn => {
+    const count = btn.dataset.count;
+    if (String(count) === String(selectedQuestionTarget)) {
+      btn.className = 'quick-q-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-600 text-white shadow-sm cursor-pointer';
+    } else {
+      btn.className = 'quick-q-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-surface-800 hover:bg-surface-750 text-slate-300 border border-surface-700 cursor-pointer';
+    }
+  });
+
+  if (quickStartBtnLabel) {
+    quickStartBtnLabel.textContent = `Start Test (${actualTestCount} Qs)`;
+  }
+
+  // 3. Update Modal Controls if open
+  if (modalSelectionCountText) {
+    modalSelectionCountText.textContent = `${selectedQuizIds.size} of ${allQuizzes.length} sets selected`;
+  }
+  if (modalTotalQPoolText) {
+    modalTotalQPoolText.textContent = `${totalPool} Questions Available`;
+  }
+  if (modalTestSummaryBadge) {
+    modalTestSummaryBadge.textContent = `Test: ${actualTestCount} Questions (${selectedQuizIds.size} Sets)`;
+  }
+  if (startTestBtnLabel) {
+    startTestBtnLabel.textContent = `Start Custom Test (${actualTestCount} Questions)`;
+  }
+
+  // Highlight active preset button in modal
+  document.querySelectorAll('.modal-q-preset-btn').forEach(btn => {
+    const count = btn.dataset.count;
+    if (String(count) === String(selectedQuestionTarget)) {
+      btn.className = 'modal-q-preset-btn py-2 px-1 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer border-rose-500 bg-rose-600 text-white ring-1 ring-rose-500';
+    } else {
+      btn.className = 'modal-q-preset-btn py-2 px-1 rounded-xl border border-surface-800 bg-surface-950 hover:bg-surface-800 text-slate-300 hover:text-white text-xs font-bold transition-all text-center cursor-pointer';
+    }
+  });
+
+  // 4. Update Card borders and custom black checkbox in the active grid
+  document.querySelectorAll('.quiz-card-select-cb').forEach(cb => {
+    const isChecked = selectedQuizIds.has(cb.dataset.id);
+    cb.checked = isChecked;
+    const card = cb.closest('#lib-card-' + cb.dataset.id) || cb.closest('.p-4');
+    if (card) {
+      if (isChecked) {
+        card.classList.add('border-rose-500', 'ring-2', 'ring-rose-500/30', 'bg-rose-950/15');
+        card.classList.remove('border-surface-800');
+      } else {
+        card.classList.remove('border-rose-500', 'ring-2', 'ring-rose-500/30', 'bg-rose-950/15');
+        card.classList.add('border-surface-800');
+      }
+      const customBox = card.querySelector('.custom-card-cb');
+      if (customBox) {
+        const icon = customBox.querySelector('i');
+        if (isChecked) {
+          customBox.className = 'custom-card-cb w-4 h-4 rounded-md bg-rose-600 border border-rose-500 text-white flex items-center justify-center transition-all shrink-0 shadow-inner';
+          if (icon) icon.className = 'fa-solid fa-check text-[10px] opacity-100';
+        } else {
+          customBox.className = 'custom-card-cb w-4 h-4 rounded-md bg-surface-950 border border-surface-600 text-transparent group-hover:border-rose-400 flex items-center justify-center transition-all shrink-0 shadow-inner';
+          if (icon) icon.className = 'fa-solid fa-check text-[10px] opacity-0';
+        }
+      }
+    }
+  });
+}
+
+function openCustomTestModal() {
+  if (!customTestModal) return;
+  customTestModal.classList.remove('hidden');
+  customTestModal.classList.add('flex');
+  if (modalQuizSearch) modalQuizSearch.value = '';
+  renderModalQuizzesList();
+  updateMultiSelectUI();
+}
+
+function closeCustomTestModal() {
+  if (!customTestModal) return;
+  customTestModal.classList.add('hidden');
+  customTestModal.classList.remove('flex');
+}
+
+function renderModalQuizzesList(filterQuery = '') {
+  if (!modalQuizzesList) return;
+  const allQuizzes = getSavedQuizzes();
+  const query = (filterQuery || '').toLowerCase().trim();
+
+  const filtered = allQuizzes.filter(q => {
+    if (!query) return true;
+    const titleMatch = (q.title || '').toLowerCase().includes(query);
+    const secMatch = (q.section || '').toLowerCase().includes(query);
+    return titleMatch || secMatch;
+  });
+
+  modalQuizzesList.innerHTML = '';
+
+  if (filtered.length === 0) {
+    modalQuizzesList.innerHTML = `
+      <div class="text-center py-8 text-slate-400 text-xs">
+        <i class="fa-solid fa-folder-open text-base mb-1 block text-slate-500"></i>
+        ${allQuizzes.length === 0 ? 'No quizzes saved in your library yet.' : 'No quizzes match your search.'}
+      </div>
+    `;
+    return;
+  }
+
+  filtered.forEach(q => {
+    const isSelected = selectedQuizIds.has(q.id);
+    const count = q.total_questions || (q.questions ? q.questions.length : 0);
+    const row = document.createElement('div');
+    row.className = `p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
+      isSelected 
+        ? 'bg-rose-950/25 border-rose-500/50 text-white' 
+        : 'bg-surface-900 border-surface-800/80 hover:bg-surface-850 text-slate-300'
+    }`;
+
+    row.innerHTML = `
+      <div class="flex items-center gap-2.5 min-w-0 flex-1">
+        <input type="checkbox" class="modal-row-cb sr-only" ${isSelected ? 'checked' : ''}>
+        <div class="w-4 h-4 rounded-md bg-surface-950 border ${isSelected ? 'bg-rose-600 border-rose-500 text-white' : 'border-surface-600 text-transparent'} flex items-center justify-center transition-all shrink-0 shadow-inner">
+          <i class="fa-solid fa-check text-[10px] ${isSelected ? 'opacity-100' : 'opacity-0'}"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h5 class="text-xs font-bold truncate leading-tight">${escapeHtml(q.title || 'Untitled Quiz')}</h5>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+            <span class="bg-surface-800 border border-surface-700/60 px-1.5 py-0.2 rounded font-mono">${count} MCQs</span>
+            ${q.section ? `<span class="text-cyan-400 font-medium">${escapeHtml(q.section)}</span>` : ''}
+            ${q.score ? `<span class="text-emerald-400 font-bold"><i class="fa-solid fa-trophy text-[8px]"></i> ${q.score}</span>` : ''}
+            <span class="text-slate-500">${q.savedAt || ''}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    row.addEventListener('click', () => {
+      if (selectedQuizIds.has(q.id)) {
+        selectedQuizIds.delete(q.id);
+      } else {
+        selectedQuizIds.add(q.id);
+      }
+      renderModalQuizzesList(modalQuizSearch ? modalQuizSearch.value : '');
+      updateMultiSelectUI();
+    });
+
+    modalQuizzesList.appendChild(row);
+  });
+}
+
+async function startCustomTest(selectedIds, targetCount, shuffle = true) {
+  if (!selectedIds || selectedIds.length === 0) {
+    showToast('Kripya kam se kam 1 quiz set select karein test banane ke liye!', 'warning');
+    return;
+  }
+
+  showToast(`Assembling questions from ${selectedIds.length} quiz sets...`, 'info');
+
+  const allQuizzes = getSavedQuizzes();
+  const selectedQuizzes = allQuizzes.filter(q => selectedIds.includes(q.id));
+
+  let pool = [];
+  const setTitles = [];
+
+  for (const stub of selectedQuizzes) {
+    setTitles.push(stub.title || 'Untitled');
+    const questions = await fetchFullQuizQuestions(stub);
+    if (questions && questions.length > 0) {
+      questions.forEach(q => {
+        const cloned = JSON.parse(JSON.stringify(q));
+        cloned.origin_quiz_id = stub.id;
+        cloned.origin_quiz_title = stub.title || 'Quiz Set';
+        cloned.video_id = q.video_id || stub.video_id || null;
+        pool.push(cloned);
+      });
+    }
+  }
+
+  if (pool.length === 0) {
+    showToast('Selected quiz sets me koi questions nahi mile. Kripya sync ya re-import karein.', 'error');
+    return;
+  }
+
+  // Randomize / Shuffle questions
+  if (shuffle) {
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+  }
+
+  // Calculate slice count
+  let count = pool.length;
+  if (targetCount !== 'all') {
+    const parsed = parseInt(targetCount, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      count = Math.min(parsed, pool.length);
+    }
+  }
+
+  const selectedQuestions = pool.slice(0, count);
+
+  // Re-index questions strictly 1..N
+  selectedQuestions.forEach((q, idx) => {
+    q.id = idx + 1;
+    q.isHindi = false;
+  });
+
+  const testTitle = `Practice Test (${selectedQuestions.length} Qs from ${selectedQuizzes.length} Sets)`;
+  const customTestId = `custom_test_${Date.now()}`;
+
+  const customTestObj = {
+    id: customTestId,
+    storageId: customTestId,
+    title: testTitle,
+    section: 'Custom Test',
+    questions: selectedQuestions,
+    total_questions: selectedQuestions.length,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    savedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    is_custom_test: true,
+    source_sets: setTitles,
+    video_id: selectedQuestions[0]?.video_id || null
+  };
+
+  // Add 'Custom Test' section to folders if missing
+  const sections = getStoredSections();
+  if (!sections.includes('Custom Test')) {
+    sections.push('Custom Test');
+    saveStoredSections(sections);
+    populateSectionDropdown();
+    renderLibrarySections();
+  }
+
+  // Save full quiz in IndexedDB so it's fully persistent
+  await QuizStorageDB.putQuiz(customTestObj);
+
+  // Add stub to saved list
+  const savedList = getSavedQuizzes();
+  savedList.unshift(customTestObj);
+  saveSavedQuizzesLocally(savedList);
+  updateSavedQuizBadge();
+  renderLibrarySections();
+  renderLibraryQuizzesGrid();
+
+  // Load into Quiz Arena
+  currentQuizData = customTestObj;
+  currentQuizData.storageId = customTestId;
+  activeQuizBadge.classList.remove('hidden');
+
+  closeCustomTestModal();
+  switchPage('quiz');
+  resetCurrentQuiz();
+  updatePushActiveQuizButtonState();
+
+  showToast(`Test Ready! ${selectedQuestions.length} Questions (${selectedQuizzes.length} sets combined). Shuru kijiye!`, 'success');
+}
+
+// Multi-Set Quiz Combiner Event Listeners
+if (openCustomTestModalBtn) {
+  openCustomTestModalBtn.addEventListener('click', openCustomTestModal);
+}
+if (closeCustomTestModalBtn) {
+  closeCustomTestModalBtn.addEventListener('click', closeCustomTestModal);
+}
+if (cancelCustomTestBtn) {
+  cancelCustomTestBtn.addEventListener('click', closeCustomTestModal);
+}
+if (customTestModal) {
+  customTestModal.addEventListener('click', (e) => {
+    if (e.target === customTestModal) closeCustomTestModal();
+  });
+}
+if (quickOpenBuilderBtn) {
+  quickOpenBuilderBtn.addEventListener('click', openCustomTestModal);
+}
+
+if (selectAllQuizzesBtn) {
+  selectAllQuizzesBtn.addEventListener('click', () => {
+    const allQuizzes = getSavedQuizzes();
+    allQuizzes.forEach(q => selectedQuizIds.add(q.id));
+    updateMultiSelectUI();
+    renderLibraryQuizzesGrid();
+  });
+}
+if (clearSelectedQuizzesBtn) {
+  clearSelectedQuizzesBtn.addEventListener('click', () => {
+    selectedQuizIds.clear();
+    updateMultiSelectUI();
+    renderLibraryQuizzesGrid();
+  });
+}
+if (modalSelectAllBtn) {
+  modalSelectAllBtn.addEventListener('click', () => {
+    const allQuizzes = getSavedQuizzes();
+    allQuizzes.forEach(q => selectedQuizIds.add(q.id));
+    renderModalQuizzesList(modalQuizSearch ? modalQuizSearch.value : '');
+    updateMultiSelectUI();
+  });
+}
+if (modalDeselectAllBtn) {
+  modalDeselectAllBtn.addEventListener('click', () => {
+    selectedQuizIds.clear();
+    renderModalQuizzesList(modalQuizSearch ? modalQuizSearch.value : '');
+    updateMultiSelectUI();
+  });
+}
+if (modalQuizSearch) {
+  modalQuizSearch.addEventListener('input', (e) => {
+    renderModalQuizzesList(e.target.value);
+  });
+}
+
+// Preset question count buttons in Toolbar
+document.querySelectorAll('.quick-q-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedQuestionTarget = btn.dataset.count;
+    updateMultiSelectUI();
+  });
+});
+
+// Preset question count buttons in Modal
+document.querySelectorAll('.modal-q-preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedQuestionTarget = btn.dataset.count;
+    if (modalCustomQInput) modalCustomQInput.value = '';
+    updateMultiSelectUI();
+  });
+});
+
+// Custom question input in Modal
+if (modalCustomQInput) {
+  modalCustomQInput.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val > 0) {
+      selectedQuestionTarget = val;
+    } else {
+      selectedQuestionTarget = 30;
+    }
+    updateMultiSelectUI();
+  });
+}
+
+// Start Test from Toolbar
+if (quickStartCombinedTestBtn) {
+  quickStartCombinedTestBtn.addEventListener('click', () => {
+    const shuffle = modalShuffleToggle ? modalShuffleToggle.checked : true;
+    startCustomTest(Array.from(selectedQuizIds), selectedQuestionTarget, shuffle);
+  });
+}
+
+// Start Test from Modal
+if (startCustomTestBtn) {
+  startCustomTestBtn.addEventListener('click', () => {
+    const shuffle = modalShuffleToggle ? modalShuffleToggle.checked : true;
+    startCustomTest(Array.from(selectedQuizIds), selectedQuestionTarget, shuffle);
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && customTestModal && !customTestModal.classList.contains('hidden')) {
+    closeCustomTestModal();
+  }
+});
