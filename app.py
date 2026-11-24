@@ -1206,7 +1206,8 @@ def get_delete_password() -> str:
     return os.environ.get("DELETE_PASSWORD", "siya").strip()
 
 class QuizUpdatePayload(BaseModel):
-    id: str
+    id: Optional[str] = None
+    code: Optional[str] = None
     username: Optional[str] = None
     title: Optional[str] = None
     section: Optional[str] = None
@@ -1633,27 +1634,79 @@ def delete_quiz_endpoint(payload: QuizDeletePayload):
 
 @app.put("/api/quiz/update")
 def update_quiz_endpoint(payload: QuizUpdatePayload):
-    get_mongo()
+    users_col, quizzes_col = get_mongo()
+    if quizzes_col is None:
+        raise HTTPException(status_code=503, detail="MongoDB is currently unavailable.")
+
     username = sanitize_username(payload.username) if payload.username else None
-    clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', str(payload.id))[:64]
-    if _mongo_client is not None and username and clean_id:
-        try:
-            update_fields = {}
-            if payload.title:
-                update_fields["title"] = html.escape(str(payload.title).strip())[:120]
-            if payload.section:
-                update_fields["section"] = re.sub(r'[^\w\s\-_]', '', str(payload.section))[:50].strip()
-            if update_fields:
-                update_fields["updated_at"] = time.time()
-                col = _mongo_client[TARGET_DB_NAME]["quiz_quizzes"]
-                col.update_one(
-                    {"id": clean_id, "username": username},
-                    {"$set": update_fields}
-                )
-            return {"success": True}
-        except Exception as e:
-            print(f"[MongoDB] Update error: {e}")
-    return {"success": True}
+    raw_id = str(payload.id or "").strip()
+    raw_code = str(payload.code or "").strip()
+
+    clean_id = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_id)[:64]
+    clean_code = sanitize_code(raw_code) if raw_code else None
+
+    # Handle cases where id was passed as the 6-character code
+    if not clean_code and len(clean_id) == 6 and clean_id.isalnum():
+        clean_code = clean_id.upper()
+    if not clean_code and clean_id.startswith("quiz_") and len(clean_id) == 11 and clean_id[5:].isalnum():
+        clean_code = clean_id[5:].upper()
+
+    match_conditions = []
+    if clean_code:
+        match_conditions.extend([
+            {"code": clean_code},
+            {"id": clean_code},
+            {"id": f"quiz_{clean_code}"}
+        ])
+    if clean_id:
+        match_conditions.extend([
+            {"id": clean_id},
+            {"code": clean_id}
+        ])
+        if clean_id.startswith("quiz_"):
+            match_conditions.append({"code": clean_id[5:]})
+
+    if not match_conditions:
+        raise HTTPException(status_code=400, detail="Quiz id or code is required to update.")
+
+    query = {"$or": match_conditions}
+
+    update_fields = {}
+    if payload.title is not None:
+        clean_title = str(payload.title).strip()[:300]
+        if clean_title:
+            update_fields["title"] = clean_title
+    if payload.section is not None:
+        clean_sec = re.sub(r'[^\w\s\-_]', '', str(payload.section)).strip()[:50]
+        update_fields["section"] = clean_sec or "General"
+
+    if not update_fields:
+        return {"success": True, "message": "No fields to update."}
+
+    update_fields["updated_at"] = time.time()
+
+    update_ops = {"$set": update_fields}
+    if username:
+        update_ops["$addToSet"] = {"linked_users": username}
+
+    try:
+        res = quizzes_col.update_one(query, update_ops)
+        if res.matched_count == 0 and clean_code:
+            res = quizzes_col.update_one(
+                {"code": {"$regex": f"^{re.escape(clean_code)}$", "$options": "i"}},
+                update_ops
+            )
+        print(f"[MongoDB Update] Query: {query}, Matched: {res.matched_count}, Modified: {res.modified_count}, New Title: {update_fields.get('title')}")
+        return {
+            "success": True,
+            "matched": res.matched_count,
+            "modified": res.modified_count,
+            "title": update_fields.get("title"),
+            "section": update_fields.get("section")
+        }
+    except Exception as e:
+        print(f"[MongoDB] Update error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database update failed: {e}")
 
 static_dir = os.path.join(BASE_DIR, "public", "static")
 if not os.path.exists(static_dir):

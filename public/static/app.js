@@ -2622,7 +2622,7 @@ function saveQuizCustomizationFromModal() {
     if (activeQuizSectionBadge) activeQuizSectionBadge.textContent = newSection;
 
     const quizzes = getSavedQuizzes();
-    const existingIdx = quizzes.findIndex(q => q.id === currentQuizData.id || (currentQuizData.storageId && q.id === currentQuizData.storageId));
+    const existingIdx = quizzes.findIndex(q => q.id === currentQuizData.id || (currentQuizData.storageId && q.id === currentQuizData.storageId) || (currentQuizData.code && q.code === currentQuizData.code));
     if (existingIdx !== -1) {
       quizzes[existingIdx].title = newTitle;
       quizzes[existingIdx].section = newSection;
@@ -2631,18 +2631,29 @@ function saveQuizCustomizationFromModal() {
       renderLibraryQuizzesGrid();
     }
 
-      if (currentUser && currentUser.username) {
-        fetch('/api/quiz/update', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: currentQuizData.storageId || currentQuizData.id,
-            username: currentUser.username,
-            title: newTitle,
-            section: newSection
-          })
-        }).catch(() => {});
+    const quizCode = currentQuizData.code || currentQuizData.share_code || (existingIdx !== -1 ? (quizzes[existingIdx].code || quizzes[existingIdx].share_code) : null);
+    const quizId = currentQuizData.storageId || currentQuizData.id || (existingIdx !== -1 ? quizzes[existingIdx].id : null);
+
+    // Sync rename to MongoDB Cloud (both for logged in users & guests)
+    fetch('/api/quiz/update', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: quizId,
+        code: quizCode,
+        username: currentUser ? currentUser.username : null,
+        title: newTitle,
+        section: newSection
+      })
+    }).then(async (res) => {
+      const data = await res.json().catch(() => null);
+      if (!res.ok || (data && data.matched === 0)) {
+        // If not matched in MongoDB yet, push full quiz document
+        await autoSaveQuiz(currentQuizData, { title: newTitle, section: newSection });
       }
+    }).catch(async () => {
+      await autoSaveQuiz(currentQuizData, { title: newTitle, section: newSection });
+    });
 
     showToast(`Quiz renamed to "${newTitle}"!`, 'success');
   } else if (currentEditModalContext.type === 'library') {
@@ -2653,25 +2664,33 @@ function saveQuizCustomizationFromModal() {
       quiz.section = newSection;
       saveSavedQuizzesLocally(quizzes);
 
-      if (currentQuizData && (currentQuizData.id === quiz.id || currentQuizData.storageId === quiz.id)) {
+      if (currentQuizData && (currentQuizData.id === quiz.id || currentQuizData.storageId === quiz.id || (quiz.code && currentQuizData.code === quiz.code))) {
         currentQuizData.title = newTitle;
         currentQuizData.section = newSection;
         if (activeQuizTitle) activeQuizTitle.textContent = newTitle;
         if (activeQuizSectionBadge) activeQuizSectionBadge.textContent = newSection;
       }
 
-      if (currentUser && currentUser.username) {
-        fetch('/api/quiz/update', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: quiz.id,
-            username: currentUser.username,
-            title: newTitle,
-            section: newSection
-          })
-        }).catch(() => {});
-      }
+      // Sync rename to MongoDB Cloud (both for logged in users & guests)
+      fetch('/api/quiz/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: quiz.id || quiz.storageId,
+          code: quiz.code || quiz.share_code,
+          username: currentUser ? currentUser.username : null,
+          title: newTitle,
+          section: newSection
+        })
+      }).then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok || (data && data.matched === 0)) {
+          // If not matched in MongoDB yet, push full quiz document
+          await autoSaveQuiz(quiz, { title: newTitle, section: newSection });
+        }
+      }).catch(async () => {
+        await autoSaveQuiz(quiz, { title: newTitle, section: newSection });
+      });
 
       renderLibrarySections();
       renderLibraryQuizzesGrid();
