@@ -1134,9 +1134,6 @@ def generate_clean_code(quizzes_col=None, length: int = 6) -> str:
         secrets.SystemRandom().shuffle(chars)
         cand = "".join(chars)
 
-        fp = os.path.join(SHARED_QUIZZES_DIR, f"{cand}.json")
-        if os.path.exists(fp):
-            continue
         if quizzes_col is not None:
             try:
                 if quizzes_col.find_one({"code": cand}):
@@ -1365,14 +1362,6 @@ def save_quiz_to_cloud(payload: QuizSavePayload):
             detail=f"MongoDB Cloud save failed: {mongo_error_msg or 'Unknown write error'}"
         )
 
-    # Also backup to local shared quizzes file
-    try:
-        local_fp = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
-        with open(local_fp, "w", encoding="utf-8") as f:
-            json.dump(quiz_data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
     lan_ip = get_lan_ip()
     db_name = _mongo_db.name if _mongo_db is not None else "yt_transcript"
     return {
@@ -1431,13 +1420,6 @@ def save_all_quizzes_to_cloud(payload: QuizBulkSavePayload):
             quiz_data["linked_users"] = linked_users
 
             sync_mongo_quiz_write(quiz_data, code)
-
-            try:
-                local_fp = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
-                with open(local_fp, "w", encoding="utf-8") as f:
-                    json.dump(quiz_data, f, ensure_ascii=False, indent=2)
-            except Exception:
-                pass
 
             results[storage_id] = {
                 "code": code,
@@ -1533,14 +1515,6 @@ def share_quiz_endpoint(quiz: Dict[str, Any]):
     except Exception as e:
         print(f"[MongoDB] Share error: {e}")
 
-    # Save to local file
-    try:
-        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{code}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(quiz_data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[Local Share] File save error: {e}")
-
     lan_ip = get_lan_ip()
     return {
         "code": code,
@@ -1581,32 +1555,12 @@ def get_cloud_catalog():
 def get_shared_quiz_endpoint(code: str):
     clean_code = sanitize_code(code)
 
-    # 1. First look up from MongoDB across cluster databases
+    # 1. Look up directly from MongoDB across cluster databases
     doc = find_mongo_quiz({"code": clean_code})
     if doc:
         return doc
 
-    # 2. Fallback to local files
-    file_path = os.path.join(SHARED_QUIZZES_DIR, f"{clean_code}.json")
-    if not os.path.exists(file_path):
-        matches = glob.glob(os.path.join(SHARED_QUIZZES_DIR, "*.json"))
-        matched_file = None
-        for m in matches:
-            base_name = os.path.splitext(os.path.basename(m))[0].upper()
-            if base_name == clean_code:
-                matched_file = m
-                break
-        if matched_file:
-            file_path = matched_file
-        else:
-            raise HTTPException(status_code=404, detail=f"Quiz code '{code}' not found.")
-
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read shared quiz: {e}")
+    raise HTTPException(status_code=404, detail=f"Quiz code '{code}' not found in MongoDB Cloud.")
 
 @app.post("/api/quiz/import_code")
 def import_quiz_by_code(payload: QuizImportPayload):
@@ -1615,18 +1569,8 @@ def import_quiz_by_code(payload: QuizImportPayload):
     # Search MongoDB across cluster databases
     quiz_data = find_mongo_quiz({"code": clean_code})
 
-    # Fallback to local file
     if not quiz_data:
-        file_path = os.path.join(SHARED_QUIZZES_DIR, f"{clean_code}.json")
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    quiz_data = json.load(f)
-            except Exception:
-                pass
-
-    if not quiz_data:
-        raise HTTPException(status_code=404, detail=f"Quiz code '{payload.code}' not found.")
+        raise HTTPException(status_code=404, detail=f"Quiz code '{payload.code}' not found in MongoDB Cloud.")
 
     username = sanitize_username(payload.username) if payload.username else None
     saved_to_cloud = False
